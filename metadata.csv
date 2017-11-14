@@ -1,0 +1,13 @@
+genome_assembly	trivial_name	min_size_threshold	genomic_domain_type	genomic_domain_path
+panTro5	chimpanzee	10000	hESC	data/TADs/hESC.hg19.bed
+gorGor5	gorilla	100000	GM12878	data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.bed
+ponAbe2	orangutan	1000000	GRB	data/TADs/41467_2017_524_MOESM2_ESM.bed
+rheMac8	rhesus		mESC	data/TADs/mESC.mm10.bed
+micMur2	mouse lemur			
+mm10	mouse			
+bosTau8	cattle			
+triMan1	manatee			
+monDom5	opossum			
+galGal5	chicken			
+xenTro7	clawed frog			
+danRer10	zebrafish			
