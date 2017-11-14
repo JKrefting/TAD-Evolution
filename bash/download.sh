@@ -99,3 +99,18 @@ for S in ${SPECIES[@]}; do
 	gzip -d 'data/chains/'$chainfile 
 
 done
+
+#-------------------------------------------------------------------------------
+# Expression data from Expression Atlas
+#-------------------------------------------------------------------------------
+
+mkdir -p data/ExpressionAtlas
+
+# download CAGE data for human tissues and metadata
+wget -O data/ExpressionAtlas/human_E-MTAB-3358_baseline_expression.TPM.tsv https://www.ebi.ac.uk/gxa/experiments-content/E-MTAB-3358/resources/ExperimentDownloadSupplier.RnaSeqBaseline/tpms.tsv
+wget -O data/ExpressionAtlas/human_E-MTAB-3358_experimental_design.tsv https://www.ebi.ac.uk/gxa/experiments-content/E-MTAB-3358/resources/ExperimentDesignFile.Baseline/experiment-design
+
+# download CAGE data for mouse tissues and metadata
+wget -O data/ExpressionAtlas/mouse_E-MTAB-3579_baseline_expression.TPM.tsv https://www.ebi.ac.uk/gxa/experiments-content/E-MTAB-3579/resources/ExperimentDownloadSupplier.RnaSeqBaseline/tpms.tsv
+wget -O data/ExpressionAtlas/mouse_E-MTAB-3579_experimental_design.tsv https://www.ebi.ac.uk/gxa/experiments-content/E-MTAB-3579/resources/ExperimentDesignFile.Baseline/experiment-design
+
