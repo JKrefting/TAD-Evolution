@@ -3,7 +3,8 @@
 .RData
 .Ruserdata
 
-# ignore data and results folder
+# ignore data and folders
+.~lock.metadata.csv# &
 data
 results
 bin
