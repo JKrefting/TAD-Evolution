@@ -88,7 +88,7 @@ for (D in DOMAINS$genomic_domain_path){
   # results fot all species and thresholds concerning a domain set
   results <- tibble()
   
-  for (SP in SPECIES$genome_assembly){
+  for (S in SPECIES$genome_assembly){
     
     for (THR in THRESHOLDS){
       
@@ -96,13 +96,13 @@ for (D in DOMAINS$genomic_domain_path){
       results_loop <- tibble(bin = seq(1, NBINS))
       
       # load breakpoint and TAD bed files
-      breakpoints <- readBPFile(SP, THR)
+      breakpoints <- readBPFile(S, THR)
       
       # handle case of no breakpoints for threshold
       if (length(breakpoints) < 1){
         results_loop <- cbind.data.frame(results_loop, hits = rep(0, NBINS))
         results_loop <- cbind.data.frame(results_loop, rdm_hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, species = rep(factor(SP), NBINS))
+        results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
         results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
         results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
         results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(0, NBINS))
@@ -127,7 +127,7 @@ for (D in DOMAINS$genomic_domain_path){
       results_loop <- cbind.data.frame(results_loop, rdm_hits = rdm_hits)
       
       # complete result_loop info columns
-      results_loop <- cbind.data.frame(results_loop, species = rep(factor(SP), NBINS))
+      results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
       results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
       results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
       results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(length(breakpoints), NBINS))
@@ -172,7 +172,7 @@ for (D in DOMAINS$genomic_domain_path){
   # results fot all species and thresholds concerning a domain set
   results <- tibble()
   
-  for (SP in SPECIES$genome_assembly){
+  for (S in SPECIES$genome_assembly){
     
     for (THR in THRESHOLDS){
       
@@ -180,13 +180,13 @@ for (D in DOMAINS$genomic_domain_path){
       results_loop <- tibble(bin = seq(1, NBINS))
       
       # load breakpoint and TAD bed files
-      breakpoints <- readBPFile(SP, THR)
+      breakpoints <- readBPFile(S, THR)
       
       # handle case of no breakpoints for threshold
       if (length(breakpoints) < 1){
         results_loop <- cbind.data.frame(results_loop, hits = rep(0, NBINS))
         results_loop <- cbind.data.frame(results_loop, rdm_hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, species = rep(factor(SP), NBINS))
+        results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
         results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
         results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
         results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(0, NBINS))

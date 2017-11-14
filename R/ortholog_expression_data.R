@@ -1,12 +1,14 @@
 ################################################################################
 # Get gene expression data in mouse and human from FANTOM5 via EBI Expression Atlas
 ################################################################################
+
 require(tidyverse)
 require(stringr)
 
 #-------------------------------------------------------------------------------
 # input parameters and data sources
 #-------------------------------------------------------------------------------
+
 human_exp_prefix <- "data/ExpressionAtlas/human_E-MTAB-3358"
 mouse_exp_prefix <- "data/ExpressionAtlas/mouse_E-MTAB-3579"
 
