@@ -75,7 +75,7 @@ for (D in DOMAINS$genomic_domain_path){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
-  # get domain type to store with ever result
+  # get domain type to store with every result
   domain_type <- unlist(DOMAINS %>%
                           filter(genomic_domain_path == D) %>%
                           select(genomic_domain_type)

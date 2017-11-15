@@ -69,7 +69,7 @@ rm -r 'data/TADs/mESC/'
 
 # GRBs of Harmston et al 2016
 wget -P 'data/TADs/' https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-017-00524-5/MediaObjects/41467_2017_524_MOESM2_ESM.txt
-cut -f1-3 41467_2017_524_MOESM2_ESM.txt | tail -n +2 > 'data/TADs/'41467_2017_524_MOESM2_ESM.bed
+cut -f1-3 'data/TADs/'41467_2017_524_MOESM2_ESM.txt | tail -n +2 > 'data/TADs/'41467_2017_524_MOESM2_ESM.bed
 
 # ------------------------------------------------------------------------------------------------
 # Alignments and chains

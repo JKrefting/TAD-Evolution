@@ -7,7 +7,7 @@ require(biomaRt)
 require(stringr)
 require(BSgenome.Hsapiens.UCSC.hg19)
 
-source("functions.R")
+source("R/functions.R")
 
 # read metadata for analysis
 METADATA <- read_tsv("metadata.csv")
@@ -20,9 +20,136 @@ THRESHOLDS <- unlist(METADATA %>%
                        select(min_size_threshold)
 )
 
+# minimal distance of a breakpoint to (both) domain boundaries 
+# for the conserved and rearranged domain classifications
+MIN_BP_BOUNDARY_DIST <- 4*10^4
+
 # Load human seqinfo
 genome <- BSgenome.Hsapiens.UCSC.hg19
 hum_seqinfo <- seqinfo(genome)
+
+# =============================================================================================================================
+# Prerequisite for domain categorisation in rearranged and conserved domains. 
+# For every domain determine if #1 it is enclosed by a syntenic block (chain) #2 a rearrangement breakpoint 
+# occurs inside the domain boundaries (for each threshold)
+# =============================================================================================================================
+
+# tibble to store all classification info
+domain_classes <- tibble()
+
+for (D in DOMAINS$genomic_domain_path) {
+  
+  domains <- import(unlist(D), seqinfo = hum_seqinfo)
+  
+  # get domain type to store with every result
+  domain_type <- unlist(DOMAINS %>%
+                          filter(genomic_domain_path == D) %>%
+                          select(genomic_domain_type)
+  )
+  
+  print(domain_type)
+  
+  for (S in SPECIES$genome_assembly) {
+    
+    print(S)
+    
+    chains <- readChainFile(S) 
+    
+    # check if domains inside chains
+    enclosed_by_chain <- overlapsAny(domains, chains, type = "within")
+    
+    # tibble to gather rearranged results for all thresholds
+    rearr_all_thr <- tibble()
+    
+    for (THR in THRESHOLDS){
+      
+      print(THR)
+      
+      # for each syntenic block size threshold, check if a rearrangement breakpoint 
+      # occurrs inside a domain with a safety margin of at least 40 kb to each TAD boundary
+      
+      breakpoints <- readBPFile(S, THR)
+      
+      # handle case of no breakpoints for threshold
+      if (length(breakpoints) < 1){
+        rearr_this_thr <- tibble(rearranged_by_breakpoint = rep(NA, length(domains)),
+                                 threshold = rep(THR, length(domains))
+        )
+        rearr_all_thr <- rbind.data.frame(rearr_all_thr, rearr_this_thr)
+        next
+      }
+      
+      # Calculate the distance to closest breakpoint for each domain
+      dist_domains_to_bp <- distanceToNearest(domains, breakpoints)
+      
+      # Preselect 'rearranged' domains
+      dist_rearr_domains <- dist_domains_to_bp[mcols(dist_domains_to_bp)$distance == 0] # bp inside domain, margin unknown
+      # Select conserved domains
+      dist_conserved_domains <- dist_domains_to_bp[mcols(dist_domains_to_bp)$distance > MIN_BP_BOUNDARY_DIST] # bp outside, margin verified
+      
+      # handle case of no domain rearrangement
+      if (length(dist_rearr_domains) < 1){
+        rearr_this_thr <- tibble(rearranged_by_breakpoint = rep(FALSE, length(domains)),
+                                 threshold = rep(THR, length(domains))
+        )
+        rearr_all_thr <- rbind.data.frame(rearr_all_thr, rearr_this_thr)
+        next
+      }
+      
+      # Verify rearranged TADs
+      savely_rearranged <- mapply(function(dm_idx, bp_idx){
+        # Select rearranged domain
+        dm <- domains[dm_idx, ]
+        # Extract domain boundaries
+        boundaries <- getBoundaries(dm, 0)
+        # Select breakpoint that overlaps domain
+        bp <- breakpoints[bp_idx, ]
+        # Calculate distances between both boundaries and the breakpoint
+        dist <- abs(distance(boundaries, bp))
+        # If at least one of the distances is smaller than 'min_distance', return FALSE 
+        if (sum(dist < MIN_BP_BOUNDARY_DIST) >= 1) {
+          # TRUE = Breakpoint far enough from boundaries
+          # FALSE = Breakpoint too close to boundary
+          return(FALSE)
+        }
+        return(TRUE)
+      }, queryHits(dist_rearr_domains), subjectHits(dist_rearr_domains))
+      
+      # Filter out savely rearranged domains from <<Hits object>>
+      dist_rearr_domains <- dist_rearr_domains[savely_rearranged]
+      
+      # Write labels into vector
+      rearr_by_bp <- vector(length=length(domains))
+      rearr_by_bp[queryHits(dist_rearr_domains)] <- TRUE
+      rearr_by_bp[queryHits(dist_conserved_domains)] <- FALSE
+      
+      # tibble to gather results for each threshold
+      rearr_this_thr <- tibble(rearranged_by_breakpoint = rearr_by_bp,
+                               threshold = THR)
+      rearr_all_thr <- rbind.data.frame(rearr_all_thr, rearr_this_thr)
+    }
+    
+    # tibble for domain classification by species
+    domain_classes_by_species  <- tibble(domain_id = rep(1:length(domains), length(THRESHOLDS)),
+                                         domain_type = domain_type,
+                                         enclosed_by_chain = rep(enclosed_by_chain, length(THRESHOLDS)),
+                                         rearranged_by_breakpoint = rearr_all_thr$rearranged_by_breakpoint,
+                                         threshold = rearr_all_thr$threshold,
+                                         species = S
+    )
+    
+    domain_classes <- rbind.data.frame(domain_classes, domain_classes_by_species)
+    
+  }
+  
+}
+
+saveRDS(domain_classes, "results/domain_classification.rds")
+
+
+# =============================================================================================================================
+# Gene expression correlation of orthologs
+# =============================================================================================================================
 
 # preprocess downloaded expression data
 source("R/ortholog_expression_data.R")
@@ -30,9 +157,9 @@ source("R/ortholog_expression_data.R")
 human_exp_match <- read_tsv("data/ExpressionAtlas/formated.human_exp.matching_subset.tsv")
 mouse_exp_match <- read_tsv("data/ExpressionAtlas/formated.mouse_exp.matching_subset.tsv")
 
-# -------------------------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------
 # Find human-mouse orthologs
-# ------------------------------------------------------------------------------------------------------------------- 
+# ------------------------------------------------------------------------------------------- 
 
 # Load gene ensembl human gene ids and orthologs
 ensembl <- useMart(host="grch37.ensembl.org", biomart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", verbose=FALSE)
@@ -47,9 +174,9 @@ orthologs = getBM(attributes=orth_attr,
                   values=list(ensemble_gene_id=human_exp_match$'Gene ID', biotype="protein_coding", chromosome_name=c(1:22, "X", "Y")),
                   mart=ensembl)
 
-# -------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Prepare data for correlation
-# -------------------------------------------------------------------------------------------------------------------  
+# --------------------------------------------------------------------------------------------  
 
 # For genes that do not have orthologs set empty string to NA
 orthologs[orthologs[ , 2] == "", 2:4] <- NA
@@ -75,9 +202,9 @@ mouse_expr <- rename(mouse_exp_match,
                      "mouse_gene_name" = "Gene Name")
 mouse_expr <- left_join(orthologs, mouse_expr, by = "mmusculus_homolog_ensembl_gene")
 
-# -------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
 # Calculate correlations
-# -------------------------------------------------------------------------------------------------------------------  
+# --------------------------------------------------------------------------------------------  
 
 correlations  <- vector()
 for (i in 1:nrow(human_expr)){
@@ -90,160 +217,95 @@ for (i in 1:nrow(human_expr)){
   correlations <- c(correlations, cor)
 }
 
-# -------------------------------------------------------------------------------------------------------------------
-# Categorise TADs as conserved or rearranged
-# -------------------------------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+# Start building final result tibble
+# --------------------------------------------------------------------------------------------  
 
-TADs_with_breakpoint <- tibble(domain_id = 1:length(domains))
-TADs_enclosed_by_chain <- tibble(domain_id = 1:length(domains))
+results <- tibble(human_gene_id = human_expr$ensembl_gene_id,
+                  human_gene_name = human_expr$human_gene_name,
+                  mouse_gene_id = mouse_expr$mmusculus_homolog_ensembl_gene,
+                  mouse_gene_name = mouse_expr$mouse_gene_name,
+                  correlation = correlations)
+
+# =============================================================================================================================
+# Assign the ortholog pairs (with correlations) to their associated domains
+# ============================================================================================================================= 
+
+# --------------------------------------------------------------------------------------------
+# Receive the transcription start sites for each human ortholog
+# -------------------------------------------------------------------------------------------- 
+
+# Get human transcription start sites, use gene ids in human expr as filter
+hum_tss_df <- as.tibble(getBM(attributes=c(
+  'ensembl_gene_id', 'chromosome_name', 'strand',
+  'transcription_start_site', 'transcript_start', 'transcript_end'), 
+  filters=c('ensembl_gene_id', 'biotype'), 
+  values=list(human_expr$ensembl_gene_id, biotype="protein_coding"), mart = ensembl)
+)
+
+# Filter out duplicated entries (take only TSS from largest transcript)
+hum_tss_df$transcript_length <- hum_tss_df$transcript_end - hum_tss_df$transcript_start
+hum_tss_df <- hum_tss_df[with(hum_tss_df, order(ensembl_gene_id, -transcript_length)), ]
+hum_tss_df <- hum_tss_df[!duplicated(hum_tss_df$ensembl_gene_id), ]
+
+# Delete the spare columns
+hum_tss_df <- hum_tss_df[ ,1:4]
+
+hum_tss_df <- hum_tss_df %>%
+  # Adapt UCSC name style
+  mutate(chr = str_c("chr", chromosome_name)) %>%
+  # Filter for valid names
+  filter(chr %in% seqnames(hum_seqinfo))
+
+# Order as in expression tables
+hum_tss_df <- hum_tss_df[match(human_expr$ensembl_gene_id, hum_tss_df$ensembl_gene_id), ]
+
+# Generate GRanges
+hum_tss_gr <- GRanges(seqnames = hum_tss_df$chr,
+                   strand = ifelse(hum_tss_df$strand == 1, "+", "-"),
+                   ranges = IRanges(start = hum_tss_df$transcription_start_site,
+                                    width = 1),
+                   geneID = hum_tss_df$ensembl_gene_id,
+                   seqinfo = hum_seqinfo
+                   )
+
+# --------------------------------------------------------------------------------------------
+# Assign the domains to ortholog pair if overlapping with human TSS
+# -------------------------------------------------------------------------------------------- 
+
+tmp <- results
+results <- tibble()
 
 for (D in DOMAINS$genomic_domain_path) {
   
+  # tp add columns to results, then rbind loop results
+  results_loop <- tmp
+  
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
-  for (S in SPECIES$genome_assembly) {
-    
-    chains <- readChainFile(S) 
-    
-    # check if domains inside chains
-    dm_enclosed_by_chain <- overlapsAny(domains, chains, type = "within")
-    
-    for (THR in THRESHOLDS){
-      
-      # for each syntenic block size threshold, check if a rearrangement breakpoint 
-      # occurrs inside a domain with a safety margin of at least 40 kb to each TAD boundary
-      breakpoints <- readBPFile(S, THR)
-    
-      # Calculate the distance to closest breakpoint
-      dist_domains_to_bp <- distanceToNearest(domains, breakpoints)
-      
-      # Filter out 'rearranged' and 'Conserved' domains from <<Hits object>>
-      # Note: Breakpoints closely outside of domain boundaries are ALSO NOT considered
-      dist_rearr_domains <- dist_domains_to_bp[mcols(dist_domains_to_bp)$distance == 0]
-      dist_intact_domains <- dist_domains_to_bp[mcols(dist_domains_to_bp)$distance > min_dist_bp_to_boundary]
-      
-      # Calculate a boolean vector that indicates which domains have a breakpoint NOT too close to a boundary
-      # TRUE = Breakpoint far enough from boundaries
-      # FALSE = Breakpoint too close to boundary
-      savely_rearranged <- mapply(function(dm_idx, bp_idx){
-        # Select rearranged domain
-        dm <- domains[dm_idx, ]
-        # Extract domain boundaries
-        boundaries <- extractBoundaries(dm, 0)
-        # Select breakpoint that overlaps domain
-        bp <- breakpoints[bp_idx, ]
-        # Calculate distances between both boundaries and the breakpoint
-        dist <- distance(boundaries, bp)
-        # If at least one of the distances is smaller than 'min_distance', return FALSE 
-        if (sum(dist < min_dist_bp_to_boundary) >= 1) {
-          return(FALSE)
-        }
-        return(TRUE)
-      }, queryHits(dist_rearr_domains), subjectHits(dist_rearr_domains))
-      
-      # Filter out savely rearranged domains from <<Hits object>>
-      dist_rearr_domains <- dist_rearr_domains[savely_rearranged]
-      
-      # Write labels into vector
-      domain_rearranged <- vector(length=length(domains))
-      domain_rearranged[queryHits(dist_rearr_domains)] <- TRUE
-      domain_rearranged[queryHits(dist_intact_domains)] <- FALSE
-    
-    # Coerce to tibble
-    is_rearranged <- tibble(tmp = is_rearranged)
-    names(is_rearranged) <- unname(unlist(COLOQUIAL_NAMES[species]))
-    are_TADs_rearranged <- cbind(are_TADs_rearranged, is_rearranged)
-  }
+  # get domain type to store with every result
+  domain_type <- unlist(DOMAINS %>%
+                          filter(genomic_domain_path == D) %>%
+                          select(genomic_domain_type)
+                        )
   
+  tss_domain_hits <- findOverlaps(hum_tss_gr, domains)
+  
+  # add domain information to results df
+  results_loop$domain_index <- NA
+  results_loop[queryHits(tss_domain_hits), ]$domain_index <- subjectHits(tss_domain_hits)
+  results_loop$domain_type <- domain_type
+  
+  results <- rbind.data.frame(results, results_loop)
 }
-
-# Coerce to tibble
-are_TADs_rearranged <- as.tibble(are_TADs_rearranged)
-
+  
+# NOTE: jetzt  nur noch mit den domain indizes in results in domain classes die TAD category bestimmen
 # get rearranged TADs
-are_TADs_rearranged_bp <- readRDS("results/dataframes/are_TADs_rearranged_by_breakpoints_dixon")
-
-are_TADs_rearranged_bp_10k <- are_TADs_rearranged_bp %>% 
-  filter(threshold == 10000) %>%
-  select(-threshold, -rearrByTreeIndex) %>%
-  gather("species", "Rearranged", 2:9) %>%
-  mutate(species = factor(species))
-
-are_TADs_rearranged_bp_100k <- are_TADs_rearranged_bp %>% 
-  filter(threshold == 100000) %>%
-  select(-threshold, -rearrByTreeIndex) %>%
-  gather("species", "Rearranged", 2:9) %>%
-  mutate(species = factor(species))
-
-# get conserved TADs 
-are_TADs_rearranged_fl <- readRDS("results/dataframes/are_TADs_rearranged_by_fills_dixon")
-# "flip" boolean table
-are_TADs_conserved_fl <- are_TADs_rearranged_fl %>%
-  mutate_at(2:9, funs(!.)) %>%
-  gather("species", "Conserved", 2:9) %>%
-  mutate(species = factor(species))
+domain_classes <- readRDS("results/domain_classification.rds")
 
 
-# find conserved and rearranged TADs with stricter rules
-data_df <- tibble(DomainIndex = are_TADs_conserved_fl$DomainIndex,
-                  species = are_TADs_conserved_fl$species,
-                  Conserved = are_TADs_conserved_fl$Conserved & !are_TADs_rearranged_bp_10k$Rearranged,
-                  Rearranged = are_TADs_rearranged_bp_10k$Rearranged & !are_TADs_conserved_fl$Conserved
-)
 
-are_TADs_consv_and_rearr <- readRDS("results/dataframes/are_TADs_consv_fills_and_rearr_bp_double_condition_10k_1000k")
 
-consv <- pull(are_TADs_consv_and_rearr %>% 
-                filter(species == "Mouse"), Conserved)
-
-rearr <- pull(are_TADs_consv_and_rearr %>%
-                filter(species == "Mouse"), Rearranged)
-
-intact_domains <- domains[consv]
-rearr_domains <- domains[rearr]
-
-# -------------------------------------------------------------------------------------------------------------------
-# Assign ortholog pairs to TAD categories
-# -------------------------------------------------------------------------------------------------------------------   
-
-# Get human transcription start sites, gene ids in human expr as filter
-hum_tss_raw <- getBM(attributes=c(
-    'ensembl_gene_id', 'chromosome_name', 'strand',
-    'transcription_start_site', 'transcript_start', 'transcript_end'), 
-    filters=c('ensembl_gene_id', 'biotype'), 
-    values=list(human_expr$ensembl_gene_id, biotype="protein_coding"), mart = ensembl)
-
-# Filter out duplicated entries (take only TSS from largest transcript)
-hum_tss_raw$transcript_length <- hum_tss_raw$transcript_end - hum_tss_raw$transcript_start
-hum_tss_raw <- hum_tss_raw[with(hum_tss_raw, order(ensembl_gene_id, -transcript_length)), ]
-hum_tss_raw <- hum_tss_raw[!duplicated(hum_tss_raw$ensembl_gene_id), ]
-
-# Delete the spare columns
-hum_tss_raw <- hum_tss_raw[ ,1:4]
-
-# Adapt UCSC name style and filter names
-hum_tss_raw <- hum_tss_raw %>%
-  mutate(chr = str_c("chr", chromosome_name)) %>%
-  filter(chr %in% seqnames(hum_seqinfo))
-
-# Generate GRanges
-hum_tss <- GRanges(seqnames = hum_tss_raw$chr,
-                   strand = ifelse(hum_tss_raw$strand == 1, "+", "-"),
-                   ranges = IRanges(start = hum_tss_raw$transcription_start_site,
-                                    width = 1),
-                   geneID = hum_tss_raw$ensembl_gene_id,
-                   seqinfo = hum_seqinfo
-)
-
-# Combine with human gene IDs in data frame
-results <- tibble(gene_id = human_expr$ensembl_gene_id, cor = correlations)
-
-# Check if genes were subject to a TAD rearrangement in second species
-# if breakpoint of second species within TAD -> rearranged, otherwise not rearranged or outside
-gene_location <- geneLocationRegardingDomains(rearr_domains, intact_domains, domains, hum_tss)
-hum_tss$class <- gene_location
-# check also for genes in grb tads
-hum_tss$grb <- overlapsAny(hum_tss, grb_domains)
 
 # get the tad idx for genes in rearranged and intact TADs
 domains$intact <- consv

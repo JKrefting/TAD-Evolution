@@ -1,5 +1,5 @@
 # Read in chain BED file
-readBPFile <- function(species){
+readChainFile <- function(species){
   ch_file <- paste0("data/chains/hg19.", species, ".chain.bed")
   return(import(ch_file, seqinfo = hum_seqinfo))
 }
@@ -9,6 +9,17 @@ readBPFile <- function(species, threshold){
   bp_file <- paste0("data/breakpoints/hg19.", species, ".", 
                     as.character(format(threshold, scientific = FALSE)), ".bp.bed")
   return(import(bp_file, seqinfo = hum_seqinfo))
+}
+
+# ' Extracts domain boundaries, each enlarged by 'boundary_dist' in both directions.
+# '
+# ' @param domains A GRanges object containing TAD ranges.
+# ' @paream boundary_dist An integer indicating the length of boundary enlargement.
+# ' @return GRanges containing only the boundaries. 
+getBoundaries <- function(domains, boundary_dist){
+  boundaries <- c(GRanges(seqnames(domains), IRanges(start(domains) - boundary_dist, start(domains) + boundary_dist), seqinfo = hum_seqinfo),
+                  GRanges(seqnames(domains), IRanges(end(domains) - boundary_dist, end(domains) + boundary_dist), seqinfo = hum_seqinfo))
+  return(boundaries)
 }
 
 # subdivide the regions into bins of equal size and find number of breakpoints that fall into each bin
