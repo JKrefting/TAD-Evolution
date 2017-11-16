@@ -9,7 +9,7 @@ require(BSgenome.Hsapiens.UCSC.hg19)
 
 source("R/functions.R")
 
-# read metadata for analysis
+# Read metadata for analysis
 METADATA <- read_tsv("metadata.csv")
 SPECIES <- select(METADATA, genome_assembly, trivial_name)
 DOMAINS <- METADATA %>% 
@@ -20,9 +20,14 @@ THRESHOLDS <- unlist(METADATA %>%
                        select(min_size_threshold)
 )
 
-# minimal distance of a breakpoint to (both) domain boundaries 
+# Minimal distance of a breakpoint to (both) domain boundaries 
 # for the conserved and rearranged domain classifications
 MIN_BP_BOUNDARY_DIST <- 4*10^4
+
+# Conserved domains do NOT have breakpoints from this size threshold
+CONSV_BP_THR <- 10^4
+# Rearranged domains have breakpoints from this size threshold
+REARR_BP_THR <- 10^6
 
 # Load human seqinfo
 genome <- BSgenome.Hsapiens.UCSC.hg19
@@ -228,7 +233,7 @@ results <- tibble(human_gene_id = human_expr$ensembl_gene_id,
                   correlation = correlations)
 
 # =============================================================================================================================
-# Assign the ortholog pairs (with correlations) to their associated domains
+# Assign the ortholog pairs (with correlations) to their associated domains and categorise
 # ============================================================================================================================= 
 
 # --------------------------------------------------------------------------------------------
@@ -270,78 +275,67 @@ hum_tss_gr <- GRanges(seqnames = hum_tss_df$chr,
                    )
 
 # --------------------------------------------------------------------------------------------
-# Assign the domains to ortholog pair if overlapping with human TSS
+# Assign the domains to ortholog pair in 'results' if overlapping with human TSS,
+# then denote conserved or rerranged status of each domain
 # -------------------------------------------------------------------------------------------- 
 
-tmp <- results
-results <- tibble()
+domain_classes <- readRDS("results/domain_classification.rds")
+
+tmp <- tibble()
 
 for (D in DOMAINS$genomic_domain_path) {
-  
-  # tp add columns to results, then rbind loop results
-  results_loop <- tmp
-  
-  domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
   # get domain type to store with every result
   domain_type <- unlist(DOMAINS %>%
                           filter(genomic_domain_path == D) %>%
                           select(genomic_domain_type)
-                        )
+  )
+  
+  # to add columns to results, then rbind loop results
+  results_loop <- filter(results, domain_type == domain_type)
+  
+  domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
   tss_domain_hits <- findOverlaps(hum_tss_gr, domains)
   
   # add domain information to results df
-  results_loop$domain_index <- NA
-  results_loop[queryHits(tss_domain_hits), ]$domain_index <- subjectHits(tss_domain_hits)
+  results_loop$domain_id <- NA
+  results_loop[queryHits(tss_domain_hits), ]$domain_id <- subjectHits(tss_domain_hits)
   results_loop$domain_type <- domain_type
   
-  results <- rbind.data.frame(results, results_loop)
-}
+  # categorise domain as conserved
+  conserved <- domain_classes %>%
+    filter(domain_type == domain_type, 
+           threshold == CONSV_BP_THR
+    ) %>%
+    transmute(domain_id = domain_id,
+              conserved = enclosed_by_chain & !rearranged_by_breakpoint)
   
-# NOTE: jetzt  nur noch mit den domain indizes in results in domain classes die TAD category bestimmen
-# get rearranged TADs
-domain_classes <- readRDS("results/domain_classification.rds")
+  # categorise domain as rearranged
+    rearranged <- domain_classes %>%
+    filter(domain_type == domain_type, 
+           threshold == REARR_BP_THR
+    ) %>%
+    transmute(domain_id = domain_id,
+              rearranged = !enclosed_by_chain & rearranged_by_breakpoint)
+  
+  # merge by domain id
+  results_loop$conserved <- conserved[match(results_loop$domain_id, conserved$domain_id), ]$conserved
+  results_loop$rearranged <- rearranged[match(results_loop$domain_id, rearranged$domain_id), ]$rearranged
+  
+  tmp <- rbind.data.frame(tmp, results_loop)
+}
 
+results <- tmp
 
+# --------------------------------------------------------------------------------------------
+# Finish categorisation of orthpairs localised in conserved, rearranged or outside domains
+# -------------------------------------------------------------------------------------------- 
 
+results$category <- NA
+results$category <- ifelse(results$conserved, "Conserved", results$category)
+results$category <- ifelse(results$rearranged, "Rearranged", results$category)
+results$category <- ifelse(is.na(results$domain_id), "Outside", results$category)
+results$category <- factor(results$category, levels = c("Conserved", "Rearranged", "Outside"))
 
-
-# get the tad idx for genes in rearranged and intact TADs
-domains$intact <- consv
-domains$rearr <- rearr
-intact_tad_idx <- findOverlaps(hum_tss, domains[domains$intact], select = "first")
-rearr_tad_idx <- findOverlaps(hum_tss, domains[domains$rearr], select = "first")
-intact_tad_idx[is.na(intact_tad_idx)] <- rearr_tad_idx[is.na(intact_tad_idx)]
-hum_tss$tad <- intact_tad_idx
-
-# # Calculate distances of TSS to nearest breakpoint
-# distances <- distanceToNearest(hum_tss, breakpoints)
-# hum_tss$distGeneToBreakpoint <- -1
-# hum_tss[queryHits(distances)]$distGeneToBreakpoint <- mcols(distances)$distance
-# if (sum(hum_tss$distGeneToBreakpoint == -1) > 0) hum_tss[hum_tss$distGeneToBreakpoint == -1]$distGeneToBreakpoint <- NA
-
-# ------------------------------------------------------------- Gather everything in dataframe
-# Merge the "correlations" and "hum_tss" dataframes.
-
-# Extract columns in the same row order as in results (not matched = NA)
-class <- hum_tss[match(results$geneID, hum_tss$geneID), ]$class
-tad_idx <- hum_tss[match(results$geneID, hum_tss$geneID), ]$tad
-in_grb <- hum_tss[match(results$geneID, hum_tss$geneID), ]$grb
-# dist_gene_to_breakpoint <- hum_tss[match(correlations$geneID, hum_tss$geneID), ]$distGeneToBreakpoint
-
-# Gather everything in correlations df
-results <- cbind.data.frame(results, class=class, tad=tad_idx, grb = in_grb)
-
-# filter out na class
-results <- filter(results, !is.na(class))
-
-# Add species label to data, factorise, order
-results$class <- as.factor(results$class)
-results$class <- factor(results$class, levels = c("Conserved", "Rearranged", "Outside"))
-
-results <- as.tibble(results)
-
-# Save results
-saveRDS(results, str_c("results/dataframes/expressions_part1_fantom_data_dixon_domains_fills_and_bp_double_condition_10k_1000k"))
-# }
+saveRDS(results, "results/ortholog_expression_correlation.rds")
