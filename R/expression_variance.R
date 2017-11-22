@@ -22,6 +22,10 @@ dir.create(dirname(outPrefix), showWarnings = FALSE)
 # read genes and with categories from ortholog_expression_analysis.R script
 expCorDF <- read_rds("results/ortholog_expression_correlation.rds")
 
+# filter out mESCs because they does not make sense on human genome
+expCorDF <- expCorDF %>% 
+  filter(domain_type != "mESC")
+
 # count gens per category
 countDF <- expCorDF %>% 
   count(domain_type, category)
@@ -49,7 +53,7 @@ expVarDF <- readxl::read_excel(exp_variance_file, sheet = 2)
 # Add expression variance estimates to expression correlation data set
 #*******************************************************************************
 expCorDF <- expCorDF %>% 
-  left_join(expVarDF, by = c("human_gene_id" = "gene_id"))
+  left_join(expVarDF, by = c("ensembl_gene_id" = "gene_id"))
 
 
 #*******************************************************************************
