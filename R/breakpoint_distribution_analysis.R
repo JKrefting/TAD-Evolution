@@ -24,6 +24,9 @@ NBINS <- 20
 # number of random control breakpoints per actual breakpoint
 NCONTROLS <- 100
 
+# size around a boundary that is investigated (only relevant for 2nd analysis)
+BOUNDARY_SIZE <- 4*10^5
+
 # Load human seqinfo
 genome <- BSgenome.Hsapiens.UCSC.hg19
 hum_seqinfo <- seqinfo(genome)
@@ -160,14 +163,17 @@ for (D in DOMAINS$genomic_domain_path){
                           select(genomic_domain_type)
   )
   
-  
+  # extract boundaries
   boundaries <- c(GRanges(seqnames(domains), 
-                          IRanges(start(domains) - boundary_dist, start(domains) + boundary_dist), 
+                          IRanges(start(domains), start(domains)), 
                           seqinfo = hum_seqinfo),
                   GRanges(seqnames(domains), 
-                          IRanges(end(domains) - boundary_dist, end(domains) + boundary_dist), 
+                          IRanges(end(domains), end(domains)), 
                           seqinfo = hum_seqinfo)
                   )  
+  
+  # enlarge
+  boundaries_plus <- resize(boundaries, fix = "center", BOUNDARY_SIZE)
   
   # results fot all species and thresholds concerning a domain set
   results <- tibble()
@@ -188,28 +194,142 @@ for (D in DOMAINS$genomic_domain_path){
         results_loop <- cbind.data.frame(results_loop, rdm_hits = rep(0, NBINS))
         results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
         results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
-        results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
+        results_loop <- cbind.data.frame(results_loop, boundaries = rep(factor(domain_type), NBINS))
         results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(0, NBINS))
         results <- rbind.data.frame(results, results_loop)
         next
       }
-    # calculate hits
-    hits_at_boundaries <- calcHitsAtBoundaries(breakpoints, boundaries, n_bins, 'list')
-    # add as col to plot_data_loop
-    plot_data_loop <- cbind.data.frame(plot_data_loop, hits = hits_at_boundaries)
-    
-    rdm_breakpoints_n_controls <- generateRandomBreakpointSets(breakpoints, hum_seqinfo, n_controls)
-    # generate hits per bin (domain bins) for each random breakpoint set
-    rdm_hits_at_boundaries <- calcHitsAtBoundaries(rdm_breakpoints_n_controls, boundaries, n_bins, 'list')
-    # add each rdm_hits_per_bin as column to plot_data_loop
-    plot_data_loop <- cbind.data.frame(plot_data_loop, rdmHits = rdm_hits_at_boundaries)
-    
-    # complete plot_data_loop and add to plot_data
-    plot_data_loop <- cbind.data.frame(plot_data_loop, vsSpecies = rep(species, n_bins))
-    plot_data_loop <- cbind.data.frame(plot_data_loop, threshold = rep(threshold, n_bins))
-    plot_data_loop <- cbind.data.frame(plot_data_loop, nBreakpoints = rep(length(breakpoints), n_bins))
-    plot_data <- rbind.data.frame(plot_data, plot_data_loop)
-  } # end for threshold
-} # end for species
+      
+      # determine distribution of breakpoints
+      # subdivide the genomic regions into bins of equal size and find number of breakpoints that fall into each bin
+      hits <- calcHitsPerBin(breakpoints, boundaries_plus, NBINS)
+      results_loop <- cbind.data.frame(results_loop, hits = hits)
+      
+      # generate random breakpoints
+      # count number of breakpoints for each chr in 'breakpoints'
+      breakpoints_per_chr <- as.tibble(breakpoints) %>%
+        group_by(seqnames) %>%
+        summarise(count = n())
+      # generate random breakpoints for each chromosome
+      rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo, NCONTROLS)
+      
+      # determine distribution of random breakpoints
+      rdm_hits <- calcHitsPerBin(rdm_breakpoints, boundaries_plus, NBINS)
+      results_loop <- cbind.data.frame(results_loop, rdm_hits = rdm_hits)
+      
+      # complete result_loop info columns
+      results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
+      results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
+      results_loop <- cbind.data.frame(results_loop, boundaries = rep(factor(domain_type), NBINS))
+      results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(length(breakpoints), NBINS))
+      results <- rbind.data.frame(results, results_loop)
+    }
+  }
+  
+  all_results <- rbind.data.frame(all_results, results)
+  
+}
 
-saveRDS(plot_data, file = "results/dataframes/breakpoints_boundaries_rao_large.rds")
+dir.create("results/", showWarnings = FALSE)
+all_results <- as.tibble(all_results)
+saveRDS(all_results, file = "results/breakpoints_at_boundaries.rds")
+
+# -------------------------------------------------------------------------------------------------------------------
+# Analysis of breakpoint distances to domain boundaries
+# -------------------------------------------------------------------------------------------------------------------
+
+# Calculates the distances of each breakpoint set (each species and threshold) to their
+# next boundaries in domains. The same is done for randomly generated breakpoints. 
+
+# tibble to gather all results for domain, species, threshold
+results <- tibble()
+
+for (D in DOMAINS$genomic_domain_path){
+  
+  domains <- import(unlist(D), seqinfo = hum_seqinfo)
+  
+  # get domain type to store with ever result
+  domain_type <- unlist(DOMAINS %>%
+                          filter(genomic_domain_path == D) %>%
+                          select(genomic_domain_type)
+  )
+  
+  print(domain_type)
+  
+  # extract boundaries
+  boundaries <- c(GRanges(seqnames(domains), 
+                          IRanges(start(domains), start(domains)), 
+                          seqinfo = hum_seqinfo),
+                  GRanges(seqnames(domains), 
+                          IRanges(end(domains), end(domains)), 
+                          seqinfo = hum_seqinfo)
+                  )  
+  
+  
+  for (S in SPECIES$genome_assembly){
+    
+    print(S)
+    
+    for (THR in THRESHOLDS){
+      
+      # load breakpoints, if empty -> skip
+      breakpoints <- readBPFile(S, THR)
+      if (length(breakpoints) < 1){
+        tmp_1 <- tibble(
+          boundaries = factor(domain_type),
+          species = factor(S), 
+          threshold= factor(THR),
+          distance = NA,
+          type = factor("breakpoint")
+        )
+        tmp_2 <- tibble(
+          boundaries = factor(domain_type),
+          species = factor(S), 
+          threshold= factor(THR),
+          distance = NA,
+          type = factor("random")
+        )
+        tmp <- rbind.data.frame(tmp_1, tmp_2)
+        results <- rbind.data.frame(results, tmp)
+        next
+      }
+      
+      # Returns the distance for each range in x to its nearest neighbor in the subject.
+      bp_dist <- distanceToNearest(breakpoints, boundaries)
+      
+      # do the same for random breakpoints
+      # count number of breakpoints for each chr in 'breakpoints'
+      breakpoints_per_chr <- as.tibble(breakpoints) %>%
+        group_by(seqnames) %>%
+        summarise(count = n())
+      # generate random breakpoints for each chromosome
+      rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo, NCONTROLS)
+      # calculate distances    
+      rdm_dist <- distanceToNearest(rdm_breakpoints, boundaries)
+      
+      # store distances in result tibble
+      tmp_1 <- tibble(
+        boundaries = factor(domain_type),
+        species = factor(S), 
+        threshold= factor(THR),
+        distance = mcols(bp_dist)$distance,
+        type = factor("breakpoint")
+      )
+      tmp_2 <- tibble(
+        boundaries = factor(domain_type),
+        species = factor(S), 
+        threshold= factor(THR),
+        distance = mcols(rdm_dist)$distance,
+        type = factor("random")
+      )
+      
+      tmp <- rbind.data.frame(tmp_1, tmp_2)
+      results <- rbind.data.frame(results, tmp)
+      
+    }
+  }
+}
+
+dir.create("results/", showWarnings = FALSE)
+results <- as.tibble(results)
+saveRDS(results, file = "results/distances_to_boundaries.rds")

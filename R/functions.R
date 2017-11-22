@@ -4,6 +4,12 @@ readChainFile <- function(species){
   return(import(ch_file, seqinfo = hum_seqinfo))
 }
 
+# Read in fill BED file
+readFillFile <- function(species){
+ fi_file <- paste0("data/fills/hg19.", species, ".fills.bed")
+  return(import(fi_file, seqinfo = hum_seqinfo))
+}
+
 # Read in breakpoint BED file
 readBPFile <- function(species, threshold){
   bp_file <- paste0("data/breakpoints/hg19.", species, ".", 

@@ -11,13 +11,13 @@ source("R/functions.R")
 
 # Read metadata for analysis
 METADATA <- read_tsv("metadata.csv")
-SPECIES <- select(METADATA, genome_assembly, trivial_name)
+SPECIES <- dplyr::select(METADATA, genome_assembly, trivial_name)
 DOMAINS <- METADATA %>% 
-  select(genomic_domain_type, genomic_domain_path) %>%
+  dplyr::select(genomic_domain_type, genomic_domain_path) %>%
   filter(!is.na(genomic_domain_type))
 THRESHOLDS <- unlist(METADATA %>% 
                        filter(!is.na(min_size_threshold)) %>%
-                       select(min_size_threshold)
+                       dplyr::select(min_size_threshold)
 )
 
 # Minimal distance of a breakpoint to (both) domain boundaries 
@@ -58,7 +58,7 @@ for (D in DOMAINS$genomic_domain_path) {
     
     print(S)
     
-    chains <- readChainFile(S) 
+    chains <- readFillFile(S) 
     
     # check if domains inside chains
     enclosed_by_chain <- overlapsAny(domains, chains, type = "within")
@@ -149,7 +149,7 @@ for (D in DOMAINS$genomic_domain_path) {
   
 }
 
-saveRDS(domain_classes, "results/domain_classification.rds")
+saveRDS(domain_classes, "results/domain_classification_fills.rds")
 
 
 # =============================================================================================================================
@@ -196,13 +196,13 @@ orthologs <- orthologs %>% filter(mmusculus_homolog_orthology_confidence == 1)
 orthologs <- orthologs %>% filter(!is.na(mmusculus_homolog_ensembl_gene))
 
 # Order genes in human_exp_match according to ordering in orthologs
-human_expr <- rename(human_exp_match,  
+human_expr <- dplyr::rename(human_exp_match,  
                      "ensembl_gene_id" = "Gene ID",
                      "human_gene_name" = "Gene Name")
 human_expr <- left_join(orthologs, human_expr, by = "ensembl_gene_id")
 
 # Order genes in mouse_exp_match according to ordering in orthologs
-mouse_expr <- rename(mouse_exp_match, 
+mouse_expr <- dplyr::rename(mouse_exp_match, 
                      "mmusculus_homolog_ensembl_gene" = "Gene ID",
                      "mouse_gene_name" = "Gene Name")
 mouse_expr <- left_join(orthologs, mouse_expr, by = "mmusculus_homolog_ensembl_gene")
@@ -222,15 +222,9 @@ for (i in 1:nrow(human_expr)){
   correlations <- c(correlations, cor)
 }
 
-# --------------------------------------------------------------------------------------------
-# Start building final result tibble
-# --------------------------------------------------------------------------------------------  
-
-results <- tibble(human_gene_id = human_expr$ensembl_gene_id,
-                  human_gene_name = human_expr$human_gene_name,
-                  mouse_gene_id = mouse_expr$mmusculus_homolog_ensembl_gene,
-                  mouse_gene_name = mouse_expr$mouse_gene_name,
-                  correlation = correlations)
+# make correlations identifiable by human gene id
+correlations <- tibble(ensembl_gene_id = human_expr$ensembl_gene_id,
+                       correlation = correlations)
 
 # =============================================================================================================================
 # Assign the ortholog pairs (with correlations) to their associated domains and categorise
@@ -240,12 +234,12 @@ results <- tibble(human_gene_id = human_expr$ensembl_gene_id,
 # Receive the transcription start sites for each human ortholog
 # -------------------------------------------------------------------------------------------- 
 
-# Get human transcription start sites, use gene ids in human expr as filter
+# Get human transcription start sites
 hum_tss_df <- as.tibble(getBM(attributes=c(
-  'ensembl_gene_id', 'chromosome_name', 'strand',
+  'ensembl_gene_id', 'external_gene_name', 'chromosome_name', 'strand',
   'transcription_start_site', 'transcript_start', 'transcript_end'), 
-  filters=c('ensembl_gene_id', 'biotype'), 
-  values=list(human_expr$ensembl_gene_id, biotype="protein_coding"), mart = ensembl)
+  filters=c('biotype'), 
+  values=list(biotype="protein_coding"), mart = ensembl)
 )
 
 # Filter out duplicated entries (take only TSS from largest transcript)
@@ -262,9 +256,6 @@ hum_tss_df <- hum_tss_df %>%
   # Filter for valid names
   filter(chr %in% seqnames(hum_seqinfo))
 
-# Order as in expression tables
-hum_tss_df <- hum_tss_df[match(human_expr$ensembl_gene_id, hum_tss_df$ensembl_gene_id), ]
-
 # Generate GRanges
 hum_tss_gr <- GRanges(seqnames = hum_tss_df$chr,
                    strand = ifelse(hum_tss_df$strand == 1, "+", "-"),
@@ -273,39 +264,54 @@ hum_tss_gr <- GRanges(seqnames = hum_tss_df$chr,
                    geneID = hum_tss_df$ensembl_gene_id,
                    seqinfo = hum_seqinfo
                    )
+# --------------------------------------------------------------------------------------------
+# Start building final result tibble
+# --------------------------------------------------------------------------------------------  
+
+# add ortholog gene info (if present) to ALL tss retrieved
+inter_results <- hum_tss_df %>%
+  left_join(dplyr::select(human_expr, 1:4), by = "ensembl_gene_id")
+
+# add the correlation results to otrholog pairs
+inter_results <- inter_results %>%
+  left_join(correlations, by = "ensembl_gene_id")
 
 # --------------------------------------------------------------------------------------------
 # Assign the domains to ortholog pair in 'results' if overlapping with human TSS,
 # then denote conserved or rerranged status of each domain
 # -------------------------------------------------------------------------------------------- 
 
-domain_classes <- readRDS("results/domain_classification.rds")
+
+domain_classes <- readRDS("results/domain_classification_fills.rds")
 
 tmp <- tibble()
 
 for (D in DOMAINS$genomic_domain_path) {
   
+  domains <- import(unlist(D), seqinfo = hum_seqinfo)
+  
   # get domain type to store with every result
   domain_type <- unlist(DOMAINS %>%
                           filter(genomic_domain_path == D) %>%
-                          select(genomic_domain_type)
+                          dplyr::select(genomic_domain_type)
   )
-  
+
   # to add columns to results, then rbind loop results
-  results_loop <- filter(results, domain_type == domain_type)
+  results_loop <- inter_results
   
-  domains <- import(unlist(D), seqinfo = hum_seqinfo)
-  
+  # determine gene association to domain
   tss_domain_hits <- findOverlaps(hum_tss_gr, domains)
   
-  # add domain information to results df
+  # add associated domain (if present) to orthologs
+  # NOTE: order of genes in hum_tss_gr and results_loop (inter_results) equal
   results_loop$domain_id <- NA
   results_loop[queryHits(tss_domain_hits), ]$domain_id <- subjectHits(tss_domain_hits)
   results_loop$domain_type <- domain_type
   
-  # categorise domain as conserved
+  # categorise domain as conserved, identifiable by domain id
   conserved <- domain_classes %>%
-    filter(domain_type == domain_type, 
+    filter(domain_type == domain_type,
+           species == "mm10",
            threshold == CONSV_BP_THR
     ) %>%
     transmute(domain_id = domain_id,
@@ -313,15 +319,20 @@ for (D in DOMAINS$genomic_domain_path) {
   
   # categorise domain as rearranged
     rearranged <- domain_classes %>%
-    filter(domain_type == domain_type, 
+    filter(domain_type == domain_type,
+           species == "mm10",
            threshold == REARR_BP_THR
     ) %>%
     transmute(domain_id = domain_id,
               rearranged = !enclosed_by_chain & rearranged_by_breakpoint)
   
-  # merge by domain id
-  results_loop$conserved <- conserved[match(results_loop$domain_id, conserved$domain_id), ]$conserved
-  results_loop$rearranged <- rearranged[match(results_loop$domain_id, rearranged$domain_id), ]$rearranged
+  # add conserved / rearranged info of domains by merging by domain id
+  results_loop$conserved <- conserved[match(results_loop$domain_id, conserved$domain_id), ]$conserved 
+  results_loop$rearranged <- rearranged[match(results_loop$domain_id, rearranged$domain_id), ]$rearranged 
+  
+  
+  # determine genes outside any domain
+  results_loop$outside <- !overlapsAny(hum_tss_gr, domains)
   
   tmp <- rbind.data.frame(tmp, results_loop)
 }
@@ -335,7 +346,7 @@ results <- tmp
 results$category <- NA
 results$category <- ifelse(results$conserved, "Conserved", results$category)
 results$category <- ifelse(results$rearranged, "Rearranged", results$category)
-results$category <- ifelse(is.na(results$domain_id), "Outside", results$category)
+results$category <- ifelse(results$outside, "Outside", results$category)
 results$category <- factor(results$category, levels = c("Conserved", "Rearranged", "Outside"))
 
 saveRDS(results, "results/ortholog_expression_correlation.rds")
