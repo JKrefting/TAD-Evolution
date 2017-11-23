@@ -1,71 +1,45 @@
+
 # =============================================================================================================================
 # Analysis of rearrangement breakpoint distributions with regard to stuctural domains of the human genome. 
 # =============================================================================================================================
 
-require(devtools)
-devtools::install_version("tidyverse", version = "1.1.1", repos = "http://cran.us.r-project.org")
 require(tidyverse)
 require(BSgenome.Hsapiens.UCSC.hg19)
 
-# read metadata for analysis
-METADATA <- read_tsv("metadata.csv")
-SPECIES <- select(METADATA, genome_assembly, trivial_name)
-DOMAINS <- METADATA %>% 
-  select(genomic_domain_type, genomic_domain_path) %>%
-  filter(!is.na(genomic_domain_type))
+source("R/functions.R")
+
+# Read metadata for analysis
+SPECIES <- read_tsv("species_meta.tsv")
+DOMAINS <- read_tsv("domains_meta.tsv")
+METADATA <- read_tsv("metadata.tsv")
+
+# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
 THRESHOLDS <- unlist(METADATA %>% 
-  filter(!is.na(min_size_threshold)) %>%
-  select(min_size_threshold)
+                       filter(!is.na(min_size_threshold)) %>%
+                       dplyr::select(min_size_threshold)
 )
 
-# number of bins to subdivide each structural domain
-NBINS <- 20
+# number of bins where breakpoint distribution is investigated
+NBINS <- unlist(METADATA %>% 
+                  filter(!is.na(n_bins)) %>%
+                  dplyr::select(n_bins)
+)
 
 # number of random control breakpoints per actual breakpoint
-NCONTROLS <- 100
+NCONTROLS <- unlist(METADATA %>% 
+                      filter(!is.na(n_controls)) %>%
+                      dplyr::select(n_controls)
+)
 
-# size around a boundary that is investigated (only relevant for 2nd analysis)
-BOUNDARY_SIZE <- 4*10^5
+# area around a boundary that is investigated for breakpoint enrichment (only relevant for 2nd analysis)
+BOUNDARY_AREA <-  unlist(METADATA %>% 
+                         filter(!is.na(boundary_area)) %>%
+                         dplyr::select(boundary_area)
+)
 
 # Load human seqinfo
 genome <- BSgenome.Hsapiens.UCSC.hg19
 hum_seqinfo <- seqinfo(genome)
-
-# Load function to read in breakpoint BED file
-readBPFile <- function(species, threshold){
-  bp_file <- paste0("data/breakpoints/hg19.", species, ".", 
-                   as.character(format(threshold, scientific = FALSE)), ".bp.bed")
-  return(import(bp_file, seqinfo=hum_seqinfo))
-}
-
-# subdivide the regions into bins of equal size and find number of breakpoints that fall into each bin
-calcHitsPerBin <- function(breakpoints, regions, n_bins){
-  bins <- tile(regions, n_bins)  # GRangesList
-  # check which breakpoint falls into which bin
-  allBins <- unlist(bins)
-  hitsListAll <- countOverlaps(allBins, breakpoints)
-  # add up vectors as rows in a matrix
-  hitsMatrix <- matrix(hitsListAll, ncol = n_bins, byrow = TRUE)
-  hitsPerBin <- colSums(hitsMatrix)
-  return(hitsPerBin)
-}
-
-# sample n_control random breakpoints for each actual breakpoint and chromosome
-sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo, n_controls){
-  
-  starts <- mapply(function(seqnames, count, n_controls) 
-    sample(1:seqlengths(hum_seqinfo[as.character(seqnames)]), 
-           count * n_controls, replace = TRUE), 
-    breakpoints_per_chr$seqnames, breakpoints_per_chr$count, n_controls, SIMPLIFY = TRUE)
-  
-  seqnames <- mapply(function(seqnames, count, n_controls) 
-    rep(seqnames, count * n_controls),
-    breakpoints_per_chr$seqnames, breakpoints_per_chr$count, n_controls)
-  
-  rdm_breakpoints <- GRanges(unlist(seqnames), IRanges(unlist(starts), width = 1), seqinfo = hum_seqinfo)
-  
-  return(rdm_breakpoints)
-}
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints around structural domains
@@ -74,19 +48,19 @@ sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo, n_controls){
 # tibble to gather all results for domain, species, threshold
 all_results <- tibble()
 
-for (D in DOMAINS$genomic_domain_path){
+for (D in DOMAINS$domain_path){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
   # get domain type to store with every result
   domain_type <- unlist(DOMAINS %>%
-                          filter(genomic_domain_path == D) %>%
-                          select(genomic_domain_type)
+                          filter(domain_path == D) %>%
+                          dplyr::select(domain_type)
   )
   
   
   # enlarge each domain by 50% of its width to each side
-  domains_plus <- resize(domains, fix = "center", width=2*width(domains))
+  domains_plus <- resize(domains, fix = "center", width= 2 * width(domains))
   
   # results fot all species and thresholds concerning a domain set
   results <- tibble()
@@ -153,14 +127,14 @@ saveRDS(all_results, file = "results/breakpoints_at_domains.rds")
 # tibble to gather all results for domain, species, threshold
 all_results <- tibble()
 
-for (D in DOMAINS$genomic_domain_path){
+for (D in DOMAINS$domain_path){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
   # get domain type to store with ever result
   domain_type <- unlist(DOMAINS %>%
-                          filter(genomic_domain_path == D) %>%
-                          select(genomic_domain_type)
+                          filter(domain_path == D) %>%
+                          dplyr::select(domain_type)
   )
   
   # extract boundaries
@@ -244,14 +218,14 @@ saveRDS(all_results, file = "results/breakpoints_at_boundaries.rds")
 # tibble to gather all results for domain, species, threshold
 results <- tibble()
 
-for (D in DOMAINS$genomic_domain_path){
+for (D in DOMAINS$domain_path){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
   # get domain type to store with ever result
   domain_type <- unlist(DOMAINS %>%
-                          filter(genomic_domain_path == D) %>%
-                          select(genomic_domain_type)
+                          filter(domain_path == D) %>%
+                          dplyr::select(domain_type)
   )
   
   print(domain_type)

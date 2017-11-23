@@ -7,12 +7,13 @@
 set -o errexit # stop script on first error
 
 mkdir -p 'data/breakpoints/'
+mkdir -p 'data/fills/'
 
 # species for the analyis
-SPECIES="$(cut -f1 metadata.csv | tail -n +2)"
+SPECIES="$(cut -f1 species_meta.tsv | tail -n +2)"
 
 # min size thresholds for syntenic blocks
-THRESHOLDS="$(cut -f3 metadata.csv | tail -n +2)"
+THRESHOLDS="$(cut -f1 metadata.tsv | tail -n +2)"
 
 for S in ${SPECIES[@]}; do
 	
@@ -24,6 +25,7 @@ for S in ${SPECIES[@]}; do
 			-o 'data/breakpoints/'hg38.$S.$T.bp.bed \
 			-t $T
 			
+			# liftover to hg19
 			'bin/'liftOver \
         	'data/breakpoints/'hg38.$S.$T.bp.bed \
         	'data/liftover/'hg38ToHg19.over.chain \
@@ -31,14 +33,15 @@ for S in ${SPECIES[@]}; do
         	'data/breakpoints/'hg38Tohg19.$S.$T.unmapped.bp.bed
 	done
 	
-	# get the coordinates of syntenic alignment blocks (chains)
-	python Python/chain2bed.py \
-			-i 'data/chains/'hg38.$S.all.chain \
-			-o 'data/chains/'hg38.$S.chain.bed
+	# get the coordinates of syntenic alignment blocks (fills)
+	python Python/get_fills.py \
+			-i 'data/alignments/'hg38.$S.net \
+			-o 'data/fills/'hg38.$S.fill.bed
 			
+			# liftover to hg19
 			'bin/'liftOver \
-        	'data/chains/'hg38.$S.chain.bed \
+        	'data/fills/'hg38.$S.fill.bed \
         	'data/liftover/'hg38ToHg19.over.chain \
-        	'data/chains/'hg19.$S.chain.bed \
-        	'data/chains/'hg38Tohg19.$S.unmapped.chain.bed
+        	'data/fills/'hg19.$S.fill.bed \
+        	'data/fills/'hg38Tohg19.$S.unmapped.fill.bed
 done

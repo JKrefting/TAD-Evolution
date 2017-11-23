@@ -6,3 +6,6 @@ Topologically associating domains (TADs) are genomic regions characterised by fr
 # Workflow
 
 The file 'species' lists the genome assembly abbreviations for the species used in the analysis. The abbreviations are used by bash/download.sh to download the whole-genome alignments and chains and are stored in data/alignments and data/chains respectively. 
+
+./bash/download.sh
+

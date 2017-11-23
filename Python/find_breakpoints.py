@@ -10,12 +10,14 @@ import argparse
 # size_threshold: only fills with sizes >threshold will be considered
 # bp_list (returned): list of all bp, needed to calculate sizes of rearrangement blocks (synteny blocks)
 def find_breakpoints(infile, outfile, size_threshold):
+    
     print('INFO: Net alignment infile: ', infile)
     print('INFO: Writing breakpoints to: ', outfile)
+    
     infile = open(infile, 'r')
     outfile = open(outfile, 'w')
     bp_list = []
-    print('INFO: Finding breakpoints from syntenic blocks >', size_threshold, '...')
+
     for line in infile:
         line = line.lstrip()
         if line.startswith('net'):

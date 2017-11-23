@@ -1,3 +1,4 @@
+
 # =============================================================================================================================
 # Plot breakpoint distributions with regard to stuctural domains of the human genome. 
 # =============================================================================================================================
@@ -6,157 +7,178 @@ require(tidyverse)
 require(ggplot2)
 require(ggsignif)
 
-# read metadata for analysis
-METADATA <- read_tsv("metadata.csv")
-SPECIES <- select(METADATA, genome_assembly, trivial_name)
-DOMAINS <- METADATA %>% 
-  select(genomic_domain_type, genomic_domain_path) %>%
-  filter(!is.na(genomic_domain_type))
+# Read metadata for analysis
+SPECIES <- read_tsv("species_meta.tsv")
+DOMAINS <- read_tsv("domains_meta.tsv")
+METADATA <- read_tsv("metadata.tsv")
+
+# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
 THRESHOLDS <- unlist(METADATA %>% 
                        filter(!is.na(min_size_threshold)) %>%
-                       select(min_size_threshold)
+                       dplyr::select(min_size_threshold)
 )
 
-NBINS <- 20
+# number of bins where breakpoint distribution is investigated
+NBINS <- unlist(METADATA %>% 
+                  filter(!is.na(n_bins)) %>%
+                  dplyr::select(n_bins)
+)
 
-BOUNDARY_SIZE <- 4*10^5
-
-# transforms a vector a p-values into asterisks depending on their value
-# * = pVal < 0.05, ** = pVal < 0.01, *** = pVal < 0.001 
-asterisks <- function(pVals){
-  blank <- pVals >= 0.05 
-  sig <- pVals < 0.05
-  hsig <- pVals < 0.01
-  hhsig <- pVals < 0.001
-  pVals[blank] <- ""
-  pVals[sig] <- "*"
-  pVals[hsig] <- "**"
-  pVals[hhsig] <- "***"
-  return(pVals)
-}
-
+# area around a boundary that is investigated for breakpoint enrichment (only relevant for 2nd analysis)
+BOUNDARY_AREA <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_area)) %>%
+                           dplyr::select(boundary_area)
+)
 
 # =============================================================================================================================
 # Plot breakpoint distributions of all thresholds for one species (whole domain)
 # =============================================================================================================================
 
+# store results here
+out_dir <- "results/whole_domain/"
+dir.create(out_dir, showWarnings = FALSE)
+
 data <- readRDS("results/breakpoints_at_domains.rds")
 
-# normalise random breakpoint hits for each species
-# normalise breakpoint hits for each species and threshold 
-# add 0.5 to each bin for cosmetic reasons
-data <- data %>% 
+# prepare data for plotting
+plot_data <- data %>% 
   group_by(domains, species) %>%
+  # normalise random breakpoint hits for each species
   mutate(rdm_hits = rdm_hits / sum(rdm_hits) * 100,
          rdm_hits_sd = sd(rdm_hits / sum(rdm_hits) * 100)) %>%
   group_by(domains, species, threshold) %>%
+  # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
+         # add 0.5 to each bin for cosmetic reasons
          bin = bin + 0.5)
+
+for (D in DOMAINS$domain_type){
   
-# example for mouse breakpoints at hESC TADs:
-# SP <- factor("mm10", levels = levels(data$species))
-# D <- factor("hESC", levels = levels(data$domains))
-# then run plot code without the loops
-
-plot_data <- filter(data, species == SP, domains == D)
-
-plot_title <- unlist(SPECIES %>% 
-  filter(genome_assembly == SP) %>%
-  select(trivial_name)
-)
-
-ggplot(plot_data, 
-       aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
-  geom_point() + 
-  geom_line() + 
-  geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
-                  aes(x = bin, y = rdm_hits),
-           inherit.aes = FALSE) +
-  geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
-             aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-             fill = "grey70", 
-             alpha = 0.5, 
-             inherit.aes = FALSE) + 
-  scale_x_discrete(name="", 
-                   limits=seq(1,NBINS + 1,NBINS/4), 
-                   labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
-  geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
+  for (S in SPECIES$genome_assembly) {
+    
+    this_plot_data <- filter(data, species == S, domains == D)
+    
+    trivial_name <- unlist(SPECIES %>%
+                             filter(genome_assembly == S) %>%
+                             dplyr::select(trivial_name)
+    )
+    
+    plot_title <- trivial_name
+    
+    ggplot(this_plot_data, 
+           aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
+      geom_point() + 
+      geom_line() + 
+      geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
+                aes(x = bin, y = rdm_hits),
+                inherit.aes = FALSE) +
+      geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
+                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
+                  fill = "grey70", 
+                  alpha = 0.5, 
+                  inherit.aes = FALSE) + 
+      scale_x_discrete(name="", 
+                       limits=seq(1,NBINS + 1,NBINS/4), 
+                       labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
+      geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
+      
+      # from here all cosmetics like background, title, line colors...
+      ggtitle(plot_title) +
+      scale_colour_brewer("Chain sizes larger", 
+                          palette = "Blues", 
+                          labels = c("10 kb", "100 kb", "1000 kb")) +
+      ylab("Breakpoints [%]") +
+      theme_classic() +
+      theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
+            legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+            legend.position = "bottom",
+            axis.title.x = element_text(face="bold", size=11),
+            axis.title.y = element_text(face="bold", size=11),
+            axis.text.x = element_text(face="bold", size=11), 
+            axis.text.y = element_text(face="bold", size=11),
+            plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+    
+    ggsave(str_c(out_dir, trivial_name, "_whole.pdf"), w=6, h=4)
+    
+  }
   
-  # from here all cosmetics like background, title, line colors...
-  ggtitle(plot_title) +
-  scale_colour_brewer("Chain sizes larger", 
-                     palette = "Blues", 
-                     labels = c("10 kb", "100 kb", "1000 kb")) +
-  ylab("Breakpoints [%]") +
-  theme_classic() +
-  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
-        legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
-        legend.position = "bottom",
-        axis.title.x = element_text(face="bold", size=11),
-        axis.title.y = element_text(face="bold", size=11),
-        axis.text.x = element_text(face="bold", size=11), 
-        axis.text.y = element_text(face="bold", size=11),
-        plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+}
 
 # =============================================================================================================================
 # Plot breakpoint distributions of all thresholds for one species (at boundaries)
 # =============================================================================================================================
 
+# store results here
+out_dir <- "results/boundaries/"
+dir.create(out_dir, showWarnings = FALSE)
+
 data <- readRDS("results/breakpoints_at_boundaries.rds")
 
-# normalise random breakpoint hits for each species
-# normalise breakpoint hits for each species and threshold 
-# add 0.5 to each bin for cosmetic reasons
-data <- data %>% 
+# prepare data for plotting
+plot_data <- data %>% 
   group_by(boundaries, species) %>%
+  # normalise random breakpoint hits for each species
   mutate(rdm_hits = rdm_hits / sum(rdm_hits) * 100,
          rdm_hits_sd = sd(rdm_hits / sum(rdm_hits) * 100)) %>%
   group_by(boundaries, species, threshold) %>%
+  # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
+         # add 0.5 to each bin for cosmetic reasons
          bin = bin + 0.5)
 
-# choose species and domain type
-plot_data <- filter(data, species == SP, boundaries == D)
-
-plot_title <- unlist(SPECIES %>% 
-                       filter(genome_assembly == SP) %>%
-                       select(trivial_name)
-)
-
-ggplot(plot_data, 
-       aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
-  geom_point() + 
-  geom_line() + 
-  geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
-            aes(x = bin, y = rdm_hits),
-            inherit.aes = FALSE) +
-  geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
-              aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-              fill = "grey70", 
-              alpha = 0.5, 
-              inherit.aes = FALSE) + 
-  scale_x_discrete(name = "Distance to TAD boundary [kb]", limits=seq(1,NBINS+1,NBINS/4), 
-                            labels=c(-(BOUNDARY_SIZE/1000), -(BOUNDARY_SIZE/2000), 0, 
-                                     (BOUNDARY_SIZE/2000), (BOUNDARY_SIZE/1000))) +
-  geom_vline(xintercept = (NBINS/2) + 1, linetype=3) +
-  # annotate region where breakpoint enrichment is tested
-  # annotate("rect", xmin=9, xmax=13, ymin=-Inf, ymax=Inf, alpha=0.6, fill="grey90") + 
+for (D in DOMAINS$domain_type){
   
-  # from here all cosmetics like background, title, line colors...
-  ggtitle(plot_title) +
-  scale_colour_brewer("Chain sizes larger", 
-                      palette = "Blues", 
-                      labels = c("10 kb", "100 kb", "1000 kb")) +
-  ylab("Breakpoints [%]") +
-  theme_classic() +
-  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
-        legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
-        legend.position = "bottom",
-        axis.title.x = element_text(face="bold", size=11),
-        axis.title.y = element_text(face="bold", size=11),
-        axis.text.x = element_text(face="bold", size=11), 
-        axis.text.y = element_text(face="bold", size=11),
-        plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+  for (S in SPECIES$genome_assembly) {
+    
+    this_plot_data <- filter(plot_data, species == S, domains == D)
+    
+    trivial_name <- unlist(SPECIES %>%
+                             filter(genome_assembly == S) %>%
+                             dplyr::select(trivial_name)
+    )
+    
+    plot_title <- trivial_name
+    
+    ggplot(plot_data, 
+           aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
+      geom_point() + 
+      geom_line() + 
+      geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
+                aes(x = bin, y = rdm_hits),
+                inherit.aes = FALSE) +
+      geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
+                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
+                  fill = "grey70", 
+                  alpha = 0.5, 
+                  inherit.aes = FALSE) + 
+      scale_x_discrete(name = "Distance to TAD boundary [kb]", limits=seq(1,NBINS+1,NBINS/4), 
+                       labels=c(-(BOUNDARY_SIZE/1000), -(BOUNDARY_SIZE/2000), 0, 
+                                (BOUNDARY_SIZE/2000), (BOUNDARY_SIZE/1000))) +
+      geom_vline(xintercept = (NBINS/2) + 1, linetype=3) +
+      # annotate region where breakpoint enrichment is tested
+      # annotate("rect", xmin=9, xmax=13, ymin=-Inf, ymax=Inf, alpha=0.6, fill="grey90") + 
+      
+      # from here all cosmetics like background, title, line colors...
+      ggtitle(plot_title) +
+      scale_colour_brewer("Chain sizes larger", 
+                          palette = "Blues", 
+                          labels = c("10 kb", "100 kb", "1000 kb")) +
+      ylab("Breakpoints [%]") +
+      theme_classic() +
+      theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
+            legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+            legend.position = "bottom",
+            axis.title.x = element_text(face="bold", size=11),
+            axis.title.y = element_text(face="bold", size=11),
+            axis.text.x = element_text(face="bold", size=11), 
+            axis.text.y = element_text(face="bold", size=11),
+            plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+    
+    ggsave(str_c(out_dir, trivial_name, "_boundary.pdf"), w=6, h=4)
+    
+    
+  }
+}
 
 # =============================================================================================================================
 # Plot fisher odds ratios of breakpoint enrichments at domain boundaries
@@ -280,7 +302,6 @@ ggplot(plot_data, aes(x = type, y = distance)) +
               textsize = 3,
               tip_length = 0,
               y_position = 0,
-              vjust = 1.2,
               step_increase = 0.13,
               na.rm = TRUE) +
   scale_y_log10(name = "Distance to boundary [bp]", limit=c(1,1e+8), 

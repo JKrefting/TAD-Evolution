@@ -3,13 +3,14 @@ require(ggplot2)
 require(RColorBrewer)
 require(ggsignif)
 
-data <- readRDS("results/ortholog_expression_correlation.rds")
+data <- readRDS("results/ortholog_expression_correlation_more_savely.rds")
 
 data_stats <- data %>%
   group_by(domain_type, category) %>%
-  summarise(count = n())
+  summarise(count = n(), 
+            n_tads = length(unique(domain_id)))
 
-plot_data <- filter(data, !is.na(category), !is.na(correlation))
+plot_data <- filter(data, domain_type == "hESC", !is.na(category), !is.na(correlation))
 
 # my_palette = c(brewer.pal(5, "Dark2")[2], brewer.pal(5, "Set1")[c(2, 1, 3)])
 my_palette = brewer.pal(5, "Set1")[c(2, 1, 3)]

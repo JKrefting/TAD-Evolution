@@ -1,0 +1,4 @@
+domain_type	domain_path	domain_res
+hESC	data/TADs/hESC.hg19.bed	40000
+GM12878	data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.bed	10000
+GRB	data/TADs/41467_2017_524_MOESM2_ESM.bed	0

@@ -72,16 +72,15 @@ wget -P 'data/TADs/' https://static-content.springer.com/esm/art%3A10.1038%2Fs41
 cut -f1-3 'data/TADs/'41467_2017_524_MOESM2_ESM.txt | tail -n +2 > 'data/TADs/'41467_2017_524_MOESM2_ESM.bed
 
 # ------------------------------------------------------------------------------------------------
-# Alignments and chains
+# Alignments
 # ------------------------------------------------------------------------------------------------
 
 # create folders
 mkdir -p 'data/alignments/'
-mkdir -p 'data/chains/'
 
 # init variables
 DLPATH='http://hgdownload.soe.ucsc.edu/goldenPath/hg38/'
-SPECIES="$(cut -f1 metadata.csv | tail -n +2)"
+SPECIES="$(cut -f1 species_meta.tsv | tail -n +2)"
 
 # download alignment / chains for every species
 for S in ${SPECIES[@]}; do
@@ -92,11 +91,6 @@ for S in ${SPECIES[@]}; do
 	alnfile='hg38.'$S'.net.gz'
 	wget $DLPATH'vs'$UPPER_S'/'$alnfile -P 'data/alignments/'
 	gzip -d 'data/alignments/'$alnfile 
-
-	# chains  
-	chainfile='hg38.'$S'.all.chain.gz'
-	wget $DLPATH'vs'$UPPER_S'/'$chainfile -P 'data/chains/'
-	gzip -d 'data/chains/'$chainfile 
 
 done
 

@@ -1,12 +1,6 @@
-# Read in chain BED file
-readChainFile <- function(species){
-  ch_file <- paste0("data/chains/hg19.", species, ".chain.bed")
-  return(import(ch_file, seqinfo = hum_seqinfo))
-}
-
 # Read in fill BED file
 readFillFile <- function(species){
- fi_file <- paste0("data/fills/hg19.", species, ".fills.bed")
+ fi_file <- paste0("data/fills/hg19.", species, ".fill.bed")
   return(import(fi_file, seqinfo = hum_seqinfo))
 }
 
@@ -15,17 +9,6 @@ readBPFile <- function(species, threshold){
   bp_file <- paste0("data/breakpoints/hg19.", species, ".", 
                     as.character(format(threshold, scientific = FALSE)), ".bp.bed")
   return(import(bp_file, seqinfo = hum_seqinfo))
-}
-
-# ' Extracts domain boundaries, each enlarged by 'boundary_dist' in both directions.
-# '
-# ' @param domains A GRanges object containing TAD ranges.
-# ' @paream boundary_dist An integer indicating the length of boundary enlargement.
-# ' @return GRanges containing only the boundaries. 
-getBoundaries <- function(domains, boundary_dist){
-  boundaries <- c(GRanges(seqnames(domains), IRanges(start(domains) - boundary_dist, start(domains) + boundary_dist), seqinfo = hum_seqinfo),
-                  GRanges(seqnames(domains), IRanges(end(domains) - boundary_dist, end(domains) + boundary_dist), seqinfo = hum_seqinfo))
-  return(boundaries)
 }
 
 # subdivide the regions into bins of equal size and find number of breakpoints that fall into each bin
@@ -57,8 +40,16 @@ sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo, n_controls){
   return(rdm_breakpoints)
 }
 
-# ' Querry the Transcription Start Sites (TSS) from Ensembl (via biomaRt).
-# ' 
-# ' @param ensembl Gene ensembl
-# ' @param geneid_list List of gene identifiers to querry for (optional)
-# ' @return TSS of <longest transcript> for each querried gene 
+# transforms a vector a p-values into asterisks depending on their value
+# * = pVal < 0.05, ** = pVal < 0.01, *** = pVal < 0.001 
+asterisks <- function(pVals){
+  blank <- pVals >= 0.05 
+  sig <- pVals < 0.05
+  hsig <- pVals < 0.01
+  hhsig <- pVals < 0.001
+  pVals[blank] <- ""
+  pVals[sig] <- "*"
+  pVals[hsig] <- "**"
+  pVals[hhsig] <- "***"
+  return(pVals)
+}
