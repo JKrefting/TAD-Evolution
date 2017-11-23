@@ -5,7 +5,15 @@ Topologically associating domains (TADs) are genomic regions characterised by fr
 
 # Workflow
 
-The file 'species' lists the genome assembly abbreviations for the species used in the analysis. The abbreviations are used by bash/download.sh to download the whole-genome alignments and chains and are stored in data/alignments and data/chains respectively. 
-
+First download and preprocess data:
 ./bash/download.sh
+./bash/preprocess.sh
 
+The basic data can be evaluated in fills_and_breakpoints_plots.R.
+
+Then start analysis:
+
+Analyse breakpoint distributions at domains and domain boundaries in breakpoint_distribution_analysis.R, the results can be visualised in breakpoint_distribution_plots.R.
+
+Analyse the expression correlation of orthologs regarding conserved and rearranged domains by first classifying the domains in domain_classification.R. The correlation is conducted in
+ortholog_expression_analysis.R and the results visualised in ortholog_expression_plots.R.
