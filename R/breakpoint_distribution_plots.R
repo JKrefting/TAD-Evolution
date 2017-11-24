@@ -6,6 +6,7 @@
 require(tidyverse)
 require(ggplot2)
 require(ggsignif)
+require(stringr)
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -38,25 +39,27 @@ BOUNDARY_AREA <-  unlist(METADATA %>%
 out_dir <- "results/whole_domain/"
 dir.create(out_dir, showWarnings = FALSE)
 
-data <- readRDS("results/breakpoints_at_domains.rds")
+data <- read_rds("results/breakpoints_at_domains.rds")
 
 # prepare data for plotting
 plot_data <- data %>% 
-  group_by(domains, species) %>%
-  # normalise random breakpoint hits for each species
-  mutate(rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits / sum(rdm_hits) * 100)) %>%
   group_by(domains, species, threshold) %>%
   # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
+         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
+         rdm_ymin = rdm_hits - sd(rdm_hits),
+         rdm_ymax = rdm_hits + sd(rdm_hits), 
          # add 0.5 to each bin for cosmetic reasons
          bin = bin + 0.5)
+
+df <- plot_data %>% 
+  gather(key = "group", value = "hits", hits, rdm_hits)
 
 for (D in DOMAINS$domain_type){
   
   for (S in SPECIES$genome_assembly) {
     
-    this_plot_data <- filter(data, species == S, domains == D)
+    this_plot_data <- filter(plot_data, species == S, domains == D)
     
     trivial_name <- unlist(SPECIES %>%
                              filter(genome_assembly == S) %>%
@@ -66,17 +69,17 @@ for (D in DOMAINS$domain_type){
     plot_title <- trivial_name
     
     ggplot(this_plot_data, 
-           aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
+           aes(x = bin, y = hits, colour = factor(threshold))) +
       geom_point() + 
       geom_line() + 
-      geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
-                aes(x = bin, y = rdm_hits),
+      geom_line(data = filter(this_plot_data, threshold == 10000),
+                aes(x = bin, y = rdm_ymin),
                 inherit.aes = FALSE) +
-      geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
-                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-                  fill = "grey70", 
-                  alpha = 0.5, 
-                  inherit.aes = FALSE) + 
+     geom_ribbon(data = filter(this_plot_data, threshold == 10000),
+                 aes(x = bin, ymin = rdm_ymin, ymax = rdm_ymax),
+                 fill = "grey70", 
+                 alpha = 0.5, 
+                 inherit.aes = FALSE) + 
       scale_x_discrete(name="", 
                        limits=seq(1,NBINS + 1,NBINS/4), 
                        labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
@@ -101,7 +104,6 @@ for (D in DOMAINS$domain_type){
     ggsave(str_c(out_dir, trivial_name, "_whole.pdf"), w=6, h=4)
     
   }
-  
 }
 
 # =============================================================================================================================
@@ -112,18 +114,16 @@ for (D in DOMAINS$domain_type){
 out_dir <- "results/boundaries/"
 dir.create(out_dir, showWarnings = FALSE)
 
-data <- readRDS("results/breakpoints_at_boundaries.rds")
+data <- read_rds("results/breakpoints_at_boundaries.rds")
 
 # prepare data for plotting
 plot_data <- data %>% 
-  group_by(boundaries, species) %>%
-  # normalise random breakpoint hits for each species
-  mutate(rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits / sum(rdm_hits) * 100)) %>%
   group_by(boundaries, species, threshold) %>%
   # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
-         # add 0.5 to each bin for cosmetic reasons
+         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
+         rdm_ymin = rdm_hits - sd(rdm_hits),
+         rdm_ymax = rdm_hits + sd(rdm_hits), 
          bin = bin + 0.5)
 
 for (D in DOMAINS$domain_type){
@@ -139,15 +139,15 @@ for (D in DOMAINS$domain_type){
     
     plot_title <- trivial_name
     
-    ggplot(plot_data, 
+    ggplot(this_plot_data, 
            aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
       geom_point() + 
       geom_line() + 
-      geom_line(data = filter(plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
+      geom_line(data = filter(this_plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
                 aes(x = bin, y = rdm_hits),
                 inherit.aes = FALSE) +
-      geom_ribbon(data = filter(plot_data, threshold == "10000"), # add sd for random breakpoints
-                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
+      geom_ribbon(data = filter(this_plot_data, threshold == "10000"), # add sd for random breakpoints
+                  aes(x = bin, ymin = rdm_ymin, ymax = rdm_ymax),
                   fill = "grey70", 
                   alpha = 0.5, 
                   inherit.aes = FALSE) + 
@@ -174,8 +174,7 @@ for (D in DOMAINS$domain_type){
             axis.text.y = element_text(face="bold", size=11),
             plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
     
-    ggsave(str_c(out_dir, trivial_name, "_boundary.pdf"), w=6, h=4)
-    
+      ggsave(str_c(out_dir, trivial_name,"_", D, "_boundary.pdf"), w=6, h=4)
     
   }
 }
@@ -184,7 +183,7 @@ for (D in DOMAINS$domain_type){
 # Plot fisher odds ratios of breakpoint enrichments at domain boundaries
 # =============================================================================================================================
 
-data <- readRDS("results/breakpoints_at_boundaries.rds")
+data <- read_rds("results/breakpoints_at_boundaries.rds")
 
 # choose data for analysis
 test_data <- data %>% 
@@ -282,7 +281,7 @@ ggsave("results/breakpoint_enrichment_odds_ratios.pdf", w=12, h=4)
 # Display distance distributions of breakpoints to domain boundaries and random breakpoints to domain boundaries
 # =============================================================================================================================
 
-data <- readRDS("results/distances_to_boundaries.rds")
+data <- read_tsv("results/distances_to_boundaries.rds")
 
 # choose data for analysis
 plot_data <- data %>% 

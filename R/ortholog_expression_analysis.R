@@ -157,7 +157,7 @@ inter_results <- inter_results %>%
 # -------------------------------------------------------------------------------------------- 
 
 
-domain_classes <- readRDS("results/domain_classification_more_savely.rds")
+domain_classes <- read_tsv("results/domain_classification.tsv")
 
 # categorise domains as conserved, identifiable by domain id
 consv_dm <- domain_classes %>%
@@ -230,4 +230,4 @@ results$category <- ifelse(results$rearranged, "Rearranged", results$category)
 results$category <- ifelse(results$outside, "Outside", results$category)
 results$category <- factor(results$category, levels = c("Conserved", "Rearranged", "Outside"))
 
-saveRDS(results, "results/ortholog_expression_correlation_more_savely.rds")
+write_tsv(results, "results/ortholog_expression_correlation.tsv")

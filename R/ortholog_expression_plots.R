@@ -3,7 +3,7 @@ require(ggplot2)
 require(RColorBrewer)
 require(ggsignif)
 
-data <- readRDS("results/ortholog_expression_correlation_more_savely.rds")
+data <- read_tsv("results/ortholog_expression_correlation.tsv")
 
 data_stats <- data %>%
   group_by(domain_type, category) %>%

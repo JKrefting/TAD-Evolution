@@ -118,7 +118,8 @@ for (D in DOMAINS$domain_path){
 
 dir.create("results/", showWarnings = FALSE)
 all_results <- as.tibble(all_results)
-saveRDS(all_results, file = "results/breakpoints_at_domains.rds")
+write_tsv(all_results, "results/breakpoints_at_domains.tsv")
+write_rds(all_results, "results/breakpoints_at_domains.rds")
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints at BOUNDARIES of structural domains
@@ -147,7 +148,7 @@ for (D in DOMAINS$domain_path){
                   )  
   
   # enlarge
-  boundaries_plus <- resize(boundaries, fix = "center", BOUNDARY_SIZE)
+  boundaries_plus <- resize(boundaries, fix = "center", BOUNDARY_AREA)
   
   # results fot all species and thresholds concerning a domain set
   results <- tibble()
@@ -206,7 +207,8 @@ for (D in DOMAINS$domain_path){
 
 dir.create("results/", showWarnings = FALSE)
 all_results <- as.tibble(all_results)
-saveRDS(all_results, file = "results/breakpoints_at_boundaries.rds")
+write_tsv(all_results, "results/breakpoints_at_boundaries.tsv")
+write_rds(all_results, "results/breakpoints_at_boundaries.rds")
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoint distances to domain boundaries
@@ -306,4 +308,5 @@ for (D in DOMAINS$domain_path){
 
 dir.create("results/", showWarnings = FALSE)
 results <- as.tibble(results)
-saveRDS(results, file = "results/distances_to_boundaries.rds")
+write_tsv(results, "results/distances_to_boundaries.tsv")
+write_rds(results, "results/distances_to_boundaries.rds")

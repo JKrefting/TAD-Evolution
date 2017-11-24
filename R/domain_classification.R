@@ -104,4 +104,4 @@ for (D in DOMAINS$domain_path) {
   
 }
 
-saveRDS(domain_classes, "results/domain_classification_more_savely.rds")
+write_tsv(domain_classes, "results/domain_classification.tsv")

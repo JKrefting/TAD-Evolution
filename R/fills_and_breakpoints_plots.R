@@ -104,7 +104,7 @@ ggplot(plot_df) +
         # panel.grid.minor = element_blank()
   )
 
-ggsave("results/general/fill_size_distributions_violin.pdf", w=12, h=4)
+ggsave("results/fill_size_distributions.pdf", w=12, h=4)
 
 # -------------------------------------------------------------
 # Breakpoints
@@ -156,4 +156,4 @@ ggplot(plot_df, aes(x = threshold, y = ..count..)) +
         # panel.grid.minor = element_blank()
   )
 
-ggsave("results/general/breakpoint_numbers.pdf", w=12, h=4)
+ggsave("results/breakpoint_numbers.pdf", w=12, h=4)
