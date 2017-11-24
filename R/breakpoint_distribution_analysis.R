@@ -230,8 +230,6 @@ for (D in DOMAINS$domain_path){
                           dplyr::select(domain_type)
   )
   
-  print(domain_type)
-  
   # extract boundaries
   boundaries <- c(GRanges(seqnames(domains), 
                           IRanges(start(domains), start(domains)), 
@@ -243,8 +241,6 @@ for (D in DOMAINS$domain_path){
   
   
   for (S in SPECIES$genome_assembly){
-    
-    print(S)
     
     for (THR in THRESHOLDS){
       

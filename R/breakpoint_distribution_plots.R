@@ -25,10 +25,20 @@ NBINS <- unlist(METADATA %>%
                   dplyr::select(n_bins)
 )
 
-# area around a boundary that is investigated for breakpoint enrichment (only relevant for 2nd analysis)
-BOUNDARY_AREA <-  unlist(METADATA %>% 
-                           filter(!is.na(boundary_area)) %>%
-                           dplyr::select(boundary_area)
+# area around a boundary where breakpoint distribution is investigated (only relevant for 2nd analysis)
+BOUNDARY_PLUS <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_plus_adjacence)) %>%
+                           dplyr::select(boundary_plus_adjacence)
+)
+
+# bins (around boundaries) that are investigated for breakpoint enrichment (only relevant for 2nd analysis)
+BOUNDARY_SBIN <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_area_start_bin)) %>%
+                           dplyr::select(boundary_area_start_bin)
+)
+BOUNDARY_EBIN <-  unlist(METADATA %>% 
+                                filter(!is.na(boundary_area_end_bin)) %>%
+                                dplyr::select(boundary_area_end_bin)
 )
 
 # =============================================================================================================================
@@ -130,7 +140,7 @@ for (D in DOMAINS$domain_type){
   
   for (S in SPECIES$genome_assembly) {
     
-    this_plot_data <- filter(plot_data, species == S, domains == D)
+    this_plot_data <- filter(plot_data, species == S, boundaries == D)
     
     trivial_name <- unlist(SPECIES %>%
                              filter(genome_assembly == S) %>%
@@ -151,9 +161,10 @@ for (D in DOMAINS$domain_type){
                   fill = "grey70", 
                   alpha = 0.5, 
                   inherit.aes = FALSE) + 
-      scale_x_discrete(name = "Distance to TAD boundary [kb]", limits=seq(1,NBINS+1,NBINS/4), 
-                       labels=c(-(BOUNDARY_SIZE/1000), -(BOUNDARY_SIZE/2000), 0, 
-                                (BOUNDARY_SIZE/2000), (BOUNDARY_SIZE/1000))) +
+      scale_x_discrete(name = "Distance to TAD boundary [kb]", 
+                       limits=seq(1,NBINS+1,NBINS/4), 
+                       labels=c(as.character(-(BOUNDARY_PLUS/1000)), as.character(-(BOUNDARY_PLUS/2000)), 0, 
+                                as.character((BOUNDARY_PLUS/2000)), as.character((BOUNDARY_PLUS/1000)))) +
       geom_vline(xintercept = (NBINS/2) + 1, linetype=3) +
       # annotate region where breakpoint enrichment is tested
       # annotate("rect", xmin=9, xmax=13, ymin=-Inf, ymax=Inf, alpha=0.6, fill="grey90") + 
@@ -190,25 +201,21 @@ test_data <- data %>%
   filter(boundaries %in% c("hESC", "GM12878"))
 
 # -------------------------------------------------------------------------------------------------------------------
-# Compute a fisher test for comparing the amount of breakpoints inside the range SBIN, EBIN to
+# Compute a fisher test for comparing the amount of breakpoints inside the range BOUNDARY_SBIN, BOUNDARY_EBIN to
 # the proportion of breakpoints outside that range to the ratio of random breakpoints.
 # -------------------------------------------------------------------------------------------------------------------
 
-# Start bin and end bin, here chosen to enclose the boundaries
-SBIN <- 9
-EBIN <- 12
-
 # bin ranges where breakpoint ratios are compared
-test_bins <- seq(SBIN, EBIN)
-other_bins <- seq(1, NBINS)[-test_bins]
+TEST_BINS <- seq(BOUNDARY_SBIN, BOUNDARY_EBIN)
+OTHER_BINS <- seq(1, NBINS)[-TEST_BINS]
 
 # sum up breakpoints and random breakpoints for test and other bins
 fisher_input <- test_data %>%
   group_by(boundaries, threshold, species) %>%
-  summarise(bp_test_sum = sum(hits[bin %in% test_bins]),
-            rdm_test_sum = sum(rdm_hits[bin %in% test_bins]),
-            bp_other_sum = sum(hits[bin %in% other_bins]),
-            rdm_other_sum = sum(rdm_hits[bin %in% other_bins]))
+  summarise(bp_test_sum = sum(hits[bin %in% TEST_BINS]),
+            rdm_test_sum = sum(rdm_hits[bin %in% TEST_BINS]),
+            bp_other_sum = sum(hits[bin %in% OTHER_BINS]),
+            rdm_other_sum = sum(rdm_hits[bin %in% OTHER_BINS]))
 
 results <- tibble()
 
