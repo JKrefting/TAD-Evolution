@@ -57,13 +57,9 @@ plot_data <- data %>%
   # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
          rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_ymin = rdm_hits - sd(rdm_hits),
-         rdm_ymax = rdm_hits + sd(rdm_hits), 
+         rdm_hits_sd = sd(rdm_hits),
          # add 0.5 to each bin for cosmetic reasons
          bin = bin + 0.5)
-
-df <- plot_data %>% 
-  gather(key = "group", value = "hits", hits, rdm_hits)
 
 for (D in DOMAINS$domain_type){
   
@@ -76,17 +72,21 @@ for (D in DOMAINS$domain_type){
                              dplyr::select(trivial_name)
     )
     
-    plot_title <- trivial_name
-    
     ggplot(this_plot_data, 
            aes(x = bin, y = hits, colour = factor(threshold))) +
       geom_point() + 
       geom_line() + 
-      geom_line(data = filter(this_plot_data, threshold == 10000),
-                aes(x = bin, y = rdm_ymin),
+      geom_line(data = this_plot_data %>% 
+                  group_by(bin) %>%
+                  summarise(rdm_hits = mean(rdm_hits),
+                         rdm_hits_sd = mean(rdm_hits_sd)),
+                aes(x = bin, y = rdm_hits),
                 inherit.aes = FALSE) +
-     geom_ribbon(data = filter(this_plot_data, threshold == 10000),
-                 aes(x = bin, ymin = rdm_ymin, ymax = rdm_ymax),
+     geom_ribbon(data = this_plot_data %>% 
+                   group_by(bin) %>%
+                   summarise(rdm_hits = mean(rdm_hits),
+                             rdm_hits_sd = mean(rdm_hits_sd)),
+                 aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
                  fill = "grey70", 
                  alpha = 0.5, 
                  inherit.aes = FALSE) + 
@@ -96,7 +96,7 @@ for (D in DOMAINS$domain_type){
       geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
       
       # from here all cosmetics like background, title, line colors...
-      ggtitle(plot_title) +
+      ggtitle(trivial_name) +
       scale_colour_brewer("Chain sizes larger", 
                           palette = "Blues", 
                           labels = c("10 kb", "100 kb", "1000 kb")) +
@@ -132,8 +132,7 @@ plot_data <- data %>%
   # normalise breakpoint hits for each species and threshold 
   mutate(hits = hits / sum(hits) * 100, 
          rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_ymin = rdm_hits - sd(rdm_hits),
-         rdm_ymax = rdm_hits + sd(rdm_hits), 
+         rdm_hits_sd = sd(rdm_hits),
          bin = bin + 0.5)
 
 for (D in DOMAINS$domain_type){
@@ -153,11 +152,17 @@ for (D in DOMAINS$domain_type){
            aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
       geom_point() + 
       geom_line() + 
-      geom_line(data = filter(this_plot_data, threshold == "10000"), # random distribution (was normalised over all thresholds)
+      geom_line(data = this_plot_data %>% 
+                  group_by(bin) %>%
+                  summarise(rdm_hits = mean(rdm_hits),
+                            rdm_hits_sd = mean(rdm_hits_sd)), # random distribution (was normalised over all thresholds)
                 aes(x = bin, y = rdm_hits),
                 inherit.aes = FALSE) +
-      geom_ribbon(data = filter(this_plot_data, threshold == "10000"), # add sd for random breakpoints
-                  aes(x = bin, ymin = rdm_ymin, ymax = rdm_ymax),
+      geom_ribbon(data = this_plot_data %>% 
+                    group_by(bin) %>%
+                    summarise(rdm_hits = mean(rdm_hits),
+                              rdm_hits_sd = mean(rdm_hits_sd)), # add sd for random breakpoints
+                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
                   fill = "grey70", 
                   alpha = 0.5, 
                   inherit.aes = FALSE) + 
