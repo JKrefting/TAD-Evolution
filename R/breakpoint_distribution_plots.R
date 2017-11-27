@@ -117,6 +117,77 @@ for (D in DOMAINS$domain_type){
 }
 
 # =============================================================================================================================
+# Plot breakpoint distributions for several species (whole domain)
+# =============================================================================================================================
+
+# store results here
+out_dir <- "results/whole_domain/"
+dir.create(out_dir, showWarnings = FALSE)
+
+data <- read_rds("results/breakpoints_at_domains.rds")
+
+SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
+SPECIES_NAMES <- unname(unlist(SPECIES %>%
+                          filter(genome_assembly %in% SELECTED_SPECIES) %>%
+                          dplyr::select(trivial_name)
+                          )
+                        )
+
+# prepare data for plotting
+plot_data <- data %>% 
+  # <<< select species, domain and threshold here >>>
+  filter(species %in% SELECTED_SPECIES,
+         domains == "hESC",
+         threshold == "10000") %>%
+  # normalise breakpoint hits for each species and threshold 
+  group_by(domains, species, threshold) %>%
+  mutate(hits = hits / sum(hits) * 100, 
+         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
+         rdm_hits_sd = sd(rdm_hits),
+         # add 0.5 to each bin for cosmetic reasons
+         bin = bin + 0.5) 
+
+ggplot(plot_data, 
+       aes(x = bin, y = hits, colour = species)) +
+  geom_point() + 
+  geom_line() + 
+  geom_line(data = plot_data %>% 
+              group_by(bin) %>%
+              summarise(rdm_hits = mean(rdm_hits),
+                        rdm_hits_sd = mean(rdm_hits_sd)),
+            aes(x = bin, y = rdm_hits),
+            inherit.aes = FALSE) +
+  geom_ribbon(data = plot_data %>% 
+                group_by(bin) %>%
+                summarise(rdm_hits = mean(rdm_hits),
+                          rdm_hits_sd = mean(rdm_hits_sd)),
+              aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
+              fill = "grey70", 
+              alpha = 0.5, 
+              inherit.aes = FALSE) + 
+  scale_color_brewer("", palette = "Set1", labels = SPECIES_NAMES) +
+  scale_x_discrete(name="", 
+                   limits=seq(1,NBINS + 1,NBINS/4), 
+                   labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
+  geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
+  
+  # from here all cosmetics like background, title, line colors...
+  ylab("Breakpoints [%]") +
+  theme_classic() +
+  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
+        legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+        legend.position = "bottom",
+        axis.title.x = element_text(face="bold", size=11),
+        axis.title.y = element_text(face="bold", size=11),
+        axis.text.x = element_text(face="bold", size=11), 
+        axis.text.y = element_text(face="bold", size=11),
+        plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+
+
+ggsave(str_c(out_dir, str_c(SPECIES_NAMES, collapse = "_"), "_whole.pdf"), w=6, h=4)
+
+
+# =============================================================================================================================
 # Plot breakpoint distributions of all thresholds for one species (at boundaries)
 # =============================================================================================================================
 
@@ -194,6 +265,76 @@ for (D in DOMAINS$domain_type){
     
   }
 }
+# =============================================================================================================================
+# Plot breakpoint distributions for several species (at boundaries)
+# =============================================================================================================================
+
+# store results here
+out_dir <- "results/boundaries/"
+dir.create(out_dir, showWarnings = FALSE)
+
+data <- read_rds("results/breakpoints_at_boundaries.rds")
+
+SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
+SPECIES_NAMES <- unname(unlist(SPECIES %>%
+                                 filter(genome_assembly %in% SELECTED_SPECIES) %>%
+                                 dplyr::select(trivial_name)
+)
+)
+
+# prepare data for plotting
+plot_data <- data %>% 
+  # <<< select species, domain and threshold here >>>
+  filter(species %in% SELECTED_SPECIES,
+         boundaries == "hESC",
+         threshold == "10000") %>%
+  # normalise breakpoint hits for each species and threshold 
+  group_by(boundaries, species, threshold) %>%
+  mutate(hits = hits / sum(hits) * 100, 
+         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
+         rdm_hits_sd = sd(rdm_hits),
+         # add 0.5 to each bin for cosmetic reasons
+         bin = bin + 0.5) 
+
+ggplot(plot_data, 
+       aes(x = bin, y = hits, colour = species)) +
+  geom_point() + 
+  geom_line() + 
+  geom_line(data = plot_data %>% 
+              group_by(bin) %>%
+              summarise(rdm_hits = mean(rdm_hits),
+                        rdm_hits_sd = mean(rdm_hits_sd)),
+            aes(x = bin, y = rdm_hits),
+            inherit.aes = FALSE) +
+  geom_ribbon(data = plot_data %>% 
+                group_by(bin) %>%
+                summarise(rdm_hits = mean(rdm_hits),
+                          rdm_hits_sd = mean(rdm_hits_sd)),
+              aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
+              fill = "grey70", 
+              alpha = 0.5, 
+              inherit.aes = FALSE) + 
+  scale_color_brewer("", palette = "Set1", labels = SPECIES_NAMES) +
+  scale_x_discrete(name = "Distance to TAD boundary [kb]", 
+                   limits=seq(1,NBINS+1,NBINS/4), 
+                   labels=c(as.character(-(BOUNDARY_PLUS/1000)), as.character(-(BOUNDARY_PLUS/2000)), 0, 
+                            as.character((BOUNDARY_PLUS/2000)), as.character((BOUNDARY_PLUS/1000)))) +
+  geom_vline(xintercept = (NBINS/2) + 1, linetype=3) +
+  
+  # from here all cosmetics like background, title, line colors...
+  ylab("Breakpoints [%]") +
+  theme_classic() +
+  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
+        legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+        legend.position = "bottom",
+        axis.title.x = element_text(face="bold", size=11),
+        axis.title.y = element_text(face="bold", size=11),
+        axis.text.x = element_text(face="bold", size=11), 
+        axis.text.y = element_text(face="bold", size=11),
+        plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+
+
+ggsave(str_c(out_dir, str_c(SPECIES_NAMES, collapse = "_"), "_boundary.pdf"), w=6, h=4)
 
 # =============================================================================================================================
 # Plot fisher odds ratios of breakpoint enrichments at domain boundaries
