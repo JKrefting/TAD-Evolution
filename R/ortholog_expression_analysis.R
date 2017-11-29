@@ -34,8 +34,10 @@ hum_seqinfo <- seqinfo(genome)
 # =============================================================================================================================
 
 # read expression data tables
-human_exp_match <- read_tsv("data/ExpressionAtlas/formated.human_exp.matching_subset.tsv")
-mouse_exp_match <- read_tsv("data/ExpressionAtlas/formated.mouse_exp.matching_subset.tsv")
+# human_exp_match <- read_tsv("data/ExpressionAtlas/formated.human_exp.matching_subset.tsv")
+# mouse_exp_match <- read_tsv("data/ExpressionAtlas/formated.mouse_exp.matching_subset.tsv")
+human_exp_match <- read_tsv("../../data/gxa/FANTOM5.human_exp.matching_subset.tsv")
+mouse_exp_match <- read_tsv("../../data/gxa/FANTOM5.mouse_exp.matching_subset.tsv")
 
 # -------------------------------------------------------------------------------------------
 # Find human-mouse orthologs
@@ -157,7 +159,7 @@ inter_results <- inter_results %>%
 # -------------------------------------------------------------------------------------------- 
 
 
-domain_classes <- read_tsv("results/domain_classification.tsv")
+domain_classes <- read_rds("results/domain_classification.rds")
 
 # categorise domains as conserved, identifiable by domain id
 consv_dm <- domain_classes %>%
@@ -230,4 +232,6 @@ results$category <- ifelse(results$rearranged, "Rearranged", results$category)
 results$category <- ifelse(results$outside, "Outside", results$category)
 results$category <- factor(results$category, levels = c("Conserved", "Rearranged", "Outside"))
 
-write_tsv(results, "results/ortholog_expression_correlation.tsv")
+write_tsv(results, "results/ortholog_expression_correlation_old.tsv")
+write_rds(results, "results/ortholog_expression_correlation_old.rds")
+

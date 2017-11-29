@@ -4,6 +4,7 @@
 # =============================================================================================================================
 
 require(tidyverse)
+require(stringr)
 require(BSgenome.Hsapiens.UCSC.hg19)
 
 source("R/functions.R")
@@ -33,8 +34,8 @@ NCONTROLS <- unlist(METADATA %>%
 
 # area around a boundary that is investigated for breakpoint enrichment (only relevant for 2nd analysis)
 BOUNDARY_AREA <-  unlist(METADATA %>% 
-                         filter(!is.na(boundary_area)) %>%
-                         dplyr::select(boundary_area)
+                         filter(!is.na(boundary_plus_adjacence)) %>%
+                         dplyr::select(boundary_plus_adjacence)
 )
 
 # Load human seqinfo
@@ -45,10 +46,7 @@ hum_seqinfo <- seqinfo(genome)
 # Analysis of breakpoints around structural domains
 # -------------------------------------------------------------------------------------------------------------------
 
-# tibble to gather all results for domain, species, threshold
-all_results <- tibble()
-
-for (D in DOMAINS$domain_path){
+domain_result_list <- map(DOMAINS$domain_path, function(D){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
@@ -62,73 +60,104 @@ for (D in DOMAINS$domain_path){
   # enlarge each domain by 50% of its width to each side
   domains_plus <- resize(domains, fix = "center", width= 2 * width(domains))
   
-  # results fot all species and thresholds concerning a domain set
-  results <- tibble()
+  # returns GRangesList in which every domain is subdivided into NBINS
+  domains_plus_bins <- tile(domains_plus, NBINS)
   
-  for (S in SPECIES$genome_assembly){
+  species_result_list <- map(SPECIES$genome_assembly, function(S){
     
-    for (THR in THRESHOLDS){
-      
-      # tibble to store results for this loop 
-      results_loop <- tibble(bin = seq(1, NBINS))
+    thr_result_list <- map(THRESHOLDS, function(THR){
       
       # load breakpoint and TAD bed files
       breakpoints <- readBPFile(S, THR)
       
       # handle case of no breakpoints for threshold
       if (length(breakpoints) < 1){
-        results_loop <- cbind.data.frame(results_loop, hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, rdm_hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
-        results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
-        results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
-        results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(0, NBINS))
-        results <- rbind.data.frame(results, results_loop)
-        next
+        # tibble to store results for this loop 
+        # add to results
+        actual_results <- tibble(
+          bin = seq(NBINS),
+          hits = 0,
+          sample = "real",
+          replicate = 1,
+          species = S,
+          threshold = THR,
+          domains = domain_type,
+          n_breakpoints = length(breakpoints)
+        )
+        
+        return(actual_results)
       }
-      # determine distribution of breakpoints
-      # subdivide the genomic regions into bins of equal size and find number of breakpoints that fall into each bin
-      hits <- calcHitsPerBin(breakpoints, domains_plus, NBINS)
-      results_loop <- cbind.data.frame(results_loop, hits = hits)
       
-      # generate random breakpoints
+      # -------------------------------------------------------------------------------------------------------------------
+      # Distribution of actual breakpoints
+      # -------------------------------------------------------------------------------------------------------------------
+      
+      # find number of breakpoints that fall into each bin
+      hits <- calcHitsPerBin(breakpoints, domains_plus_bins, NBINS)
+      
+      # add to results
+      actual_results <- tibble(
+        bin = seq(NBINS),
+        hits = hits,
+        sample = "real",
+        replicate = 1,
+        species = S,
+        threshold = THR,
+        domains = domain_type,
+        n_breakpoints = length(breakpoints)
+      )
+      
+      # -------------------------------------------------------------------------------------------------------------------
+      # Distribution of random breakpoints
+      # -------------------------------------------------------------------------------------------------------------------
+      
       # count number of breakpoints for each chr in 'breakpoints'
-      breakpoints_per_chr <- as.tibble(breakpoints) %>%
+      breakpoints_per_chr <- tibble(seqnames = as.character(seqnames(breakpoints))) %>%
+        mutate(seqnames = as.character(seqnames)) %>%
         group_by(seqnames) %>%
         summarise(count = n())
-      # generate random breakpoints for each chromosome
-      rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo, NCONTROLS)
       
-      # determine distribution of random breakpoints
-      rdm_hits <- calcHitsPerBin(rdm_breakpoints, domains_plus, NBINS)
-      results_loop <- cbind.data.frame(results_loop, rdm_hits = rdm_hits)
-      
-      # complete result_loop info columns
-      results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
-      results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
-      results_loop <- cbind.data.frame(results_loop, domains = rep(factor(domain_type), NBINS))
-      results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(length(breakpoints), NBINS))
-      results <- rbind.data.frame(results, results_loop)
-    } 
-  } 
-  
-  all_results <- rbind.data.frame(all_results, results)
-  
-}
+      control_results_list <- map(seq(NCONTROLS), function(i){
+        # generate the corresponding number of random breakpoints for each chromosome
+        rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo)
+        
+        # determine distribution of random breakpoints
+        rdm_hits <- calcHitsPerBin(rdm_breakpoints, domains_plus_bins, NBINS)
+        
+        # add to results
+        results_loop <- tibble(
+          bin = seq(NBINS),
+          hits = rdm_hits,
+          sample = "random",
+          replicate = i,
+          species = S,
+          threshold = THR,
+          domains = domain_type,
+          n_breakpoints = length(breakpoints)
+        )
+        return(results_loop)
+      })
+      # return combined tibble for single threshold
+      return(bind_rows(actual_results, control_results_list))
+    }) 
+    # return combined tibble for all thresholds / single species
+    return(bind_rows(thr_result_list))
+  })
+  # return combined tibble for all species / single domain
+  return(bind_rows(species_result_list))
+})
+
+results <- bind_rows(domain_result_list)
 
 dir.create("results/", showWarnings = FALSE)
-all_results <- as.tibble(all_results)
-write_tsv(all_results, "results/breakpoints_at_domains.tsv")
-write_rds(all_results, "results/breakpoints_at_domains.rds")
+write_tsv(results, "results/breakpoints_at_domains.tsv")
+write_rds(results, "results/breakpoints_at_domains.rds")
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints at BOUNDARIES of structural domains
 # -------------------------------------------------------------------------------------------------------------------
 
-# tibble to gather all results for domain, species, threshold
-all_results <- tibble()
-
-for (D in DOMAINS$domain_path){
+domain_result_list <- map(DOMAINS$domain_path, function(D){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
   
@@ -145,70 +174,103 @@ for (D in DOMAINS$domain_path){
                   GRanges(seqnames(domains), 
                           IRanges(end(domains), end(domains)), 
                           seqinfo = hum_seqinfo)
-                  )  
+  )  
   
   # enlarge
   boundaries_plus <- resize(boundaries, fix = "center", BOUNDARY_AREA)
   
-  # results fot all species and thresholds concerning a domain set
-  results <- tibble()
+  # returns GRangesList in which every domain is subdivided into NBINS
+  boundaries_plus_bins <- tile(boundaries_plus, NBINS)
   
-  for (S in SPECIES$genome_assembly){
+  species_result_list <- map(SPECIES$genome_assembly, function(S){
     
-    for (THR in THRESHOLDS){
-      
-      # tibble to store results for this loop 
-      results_loop <- tibble(bin = seq(1, NBINS))
+    thr_result_list <- map(THRESHOLDS, function(THR){
       
       # load breakpoint and TAD bed files
       breakpoints <- readBPFile(S, THR)
       
       # handle case of no breakpoints for threshold
       if (length(breakpoints) < 1){
-        results_loop <- cbind.data.frame(results_loop, hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, rdm_hits = rep(0, NBINS))
-        results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
-        results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
-        results_loop <- cbind.data.frame(results_loop, boundaries = rep(factor(domain_type), NBINS))
-        results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(0, NBINS))
-        results <- rbind.data.frame(results, results_loop)
-        next
+        # tibble to store results for this loop 
+        # add to results
+        actual_results <- tibble(
+          bin = seq(NBINS),
+          hits = 0,
+          sample = "real",
+          replicate = 1,
+          species = S,
+          threshold = THR,
+          boundaries = domain_type,
+          n_breakpoints = length(breakpoints)
+        )
+        
+        return(actual_results)
       }
       
-      # determine distribution of breakpoints
-      # subdivide the genomic regions into bins of equal size and find number of breakpoints that fall into each bin
-      hits <- calcHitsPerBin(breakpoints, boundaries_plus, NBINS)
-      results_loop <- cbind.data.frame(results_loop, hits = hits)
+      # -------------------------------------------------------------------------------------------------------------------
+      # Distribution of actual breakpoints
+      # -------------------------------------------------------------------------------------------------------------------
       
-      # generate random breakpoints
+      # find number of breakpoints that fall into each bin
+      hits <- calcHitsPerBin(breakpoints, boundaries_plus_bins, NBINS)
+      
+      # add to results
+      actual_results <- tibble(
+        bin = seq(NBINS),
+        hits = hits,
+        sample = "real",
+        replicate = 1,
+        species = S,
+        threshold = THR,
+        domains = domain_type,
+        n_breakpoints = length(breakpoints)
+      )
+      
+      # -------------------------------------------------------------------------------------------------------------------
+      # Distribution of random breakpoints
+      # -------------------------------------------------------------------------------------------------------------------
+      
       # count number of breakpoints for each chr in 'breakpoints'
-      breakpoints_per_chr <- as.tibble(breakpoints) %>%
+      breakpoints_per_chr <- tibble(seqnames = as.character(seqnames(breakpoints))) %>%
+        mutate(seqnames = as.character(seqnames)) %>%
         group_by(seqnames) %>%
         summarise(count = n())
-      # generate random breakpoints for each chromosome
-      rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo, NCONTROLS)
       
-      # determine distribution of random breakpoints
-      rdm_hits <- calcHitsPerBin(rdm_breakpoints, boundaries_plus, NBINS)
-      results_loop <- cbind.data.frame(results_loop, rdm_hits = rdm_hits)
-      
-      # complete result_loop info columns
-      results_loop <- cbind.data.frame(results_loop, species = rep(factor(S), NBINS))
-      results_loop <- cbind.data.frame(results_loop, threshold = rep(factor(THR), NBINS))
-      results_loop <- cbind.data.frame(results_loop, boundaries = rep(factor(domain_type), NBINS))
-      results_loop <- cbind.data.frame(results_loop, n_breakpoints = rep(length(breakpoints), NBINS))
-      results <- rbind.data.frame(results, results_loop)
-    }
-  }
-  
-  all_results <- rbind.data.frame(all_results, results)
-  
-}
+      control_results_list <- map(seq(NCONTROLS), function(i){
+        # generate the corresponding number of random breakpoints for each chromosome
+        rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo)
+        
+        # determine distribution of random breakpoints
+        rdm_hits <- calcHitsPerBin(rdm_breakpoints, boundaries_plus_bins, NBINS)
+        
+        # add to results
+        results_loop <- tibble(
+          bin = seq(NBINS),
+          hits = rdm_hits,
+          sample = "random",
+          replicate = i,
+          species = S,
+          threshold = THR,
+          domains = domain_type,
+          n_breakpoints = length(breakpoints)
+        )
+        return(results_loop)
+      })
+      # return combined tibble for single threshold
+      return(bind_rows(actual_results, control_results_list))
+    }) 
+    # return combined tibble for all thresholds / single species
+    return(bind_rows(thr_result_list))
+  })
+  # return combined tibble for all species / single domain
+  return(bind_rows(species_result_list))
+})
+
+results <- bind_rows(domain_result_list)
 
 dir.create("results/", showWarnings = FALSE)
-all_results <- as.tibble(all_results)
-write_tsv(all_results, "results/breakpoints_at_boundaries.tsv")
-write_rds(all_results, "results/breakpoints_at_boundaries.rds")
+write_tsv(results, "results/breakpoints_at_boundaries.tsv")
+write_rds(results, "results/breakpoints_at_boundaries.rds")
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoint distances to domain boundaries

@@ -11,45 +11,77 @@ readBPFile <- function(species, threshold){
   return(import(bp_file, seqinfo = hum_seqinfo))
 }
 
-# subdivide the regions into bins of equal size and find number of breakpoints that fall into each bin
-calcHitsPerBin <- function(breakpoints, regions, n_bins){
-  bins <- tile(regions, n_bins)  # GRangesList
+# ' Calculates the number of breakpoints that fall into each bin for each region
+# ' 
+# ' @param breakpoints GRanges with breakpoint coordinates
+# ' @param region_bins GRangesList where every region is subdivided into n_bins
+# ' @param n_bins Integer indicating the number of bins each region is subdivided into
+# ' @return The hits per bin summed up over all regions
+calcHitsPerBin <- function(breakpoints, region_bins, n_bins){
   # check which breakpoint falls into which bin
-  allBins <- unlist(bins)
-  hitsListAll <- countOverlaps(allBins, breakpoints)
+  all_bins <- unlist(region_bins)
+  hits_list_all <- countOverlaps(all_bins, breakpoints)
   # add up vectors as rows in a matrix
-  hitsMatrix <- matrix(hitsListAll, ncol = n_bins, byrow = TRUE)
-  hitsPerBin <- colSums(hitsMatrix)
-  return(hitsPerBin)
+  hits_matrix <- matrix(hits_list_all, ncol = n_bins, byrow = TRUE)
+  # sum up over all regions
+  hits_per_bin <- colSums(hits_matrix)
+  
+  return(hits_per_bin)
 }
 
-# sample n_control random breakpoints for each actual breakpoint and chromosome
-sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo, n_controls){
+# ' Sample random breakpoints for each actual breakpoint per chromosome
+# ' 
+# ' @param breakpoints_per_chr Dataframe providing the number of actual breakpoints per chromosome
+# ' @param region_bins hum_seqinfo Seqinfo object for the construction of random breakpoint GRanges 
+# ' @return GRanges containing the sampled random breakpoints
+sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo){
   
-  starts <- mapply(function(seqnames, count, n_controls) 
-    sample(1:seqlengths(hum_seqinfo[as.character(seqnames)]), 
-           count * n_controls, replace = TRUE), 
-    breakpoints_per_chr$seqnames, breakpoints_per_chr$count, n_controls, SIMPLIFY = TRUE)
+  breakpoints_per_chr <- breakpoints_per_chr %>% 
+    mutate(
+      chrom_len = seqlengths(hum_seqinfo[seqnames])
+      )
   
-  seqnames <- mapply(function(seqnames, count, n_controls) 
-    rep(seqnames, count * n_controls),
-    breakpoints_per_chr$seqnames, breakpoints_per_chr$count, n_controls)
+  # sample the coordinates of random breakpoints
+  starts <- map2(breakpoints_per_chr$chrom_len, breakpoints_per_chr$count,
+                 sample.int)
   
-  rdm_breakpoints <- GRanges(unlist(seqnames), IRanges(unlist(starts), width = 1), seqinfo = hum_seqinfo)
+  seqnames <- rep(breakpoints_per_chr$seqnames, breakpoints_per_chr$count)  
+  
+  rdm_breakpoints <- GRanges(seqnames, IRanges(unlist(starts), width = 1), seqinfo = hum_seqinfo)
   
   return(rdm_breakpoints)
 }
 
-# transforms a vector a p-values into asterisks depending on their value
-# * = pVal < 0.05, ** = pVal < 0.01, *** = pVal < 0.001 
-asterisks <- function(pVals){
-  blank <- pVals >= 0.05 
-  sig <- pVals < 0.05
-  hsig <- pVals < 0.01
-  hhsig <- pVals < 0.001
-  pVals[blank] <- ""
-  pVals[sig] <- "*"
-  pVals[hsig] <- "**"
-  pVals[hhsig] <- "***"
-  return(pVals)
+# ' A vector of p values is transformed into a vector of asterisks representing significance levels
+# ' 
+# ' @param p_vals Integer (vector) containing p values
+# ' @return String (vector) containing asterisks for the respective significance level
+# none = p_val > 0.05; * = p_val <= 0.05; ** = p_val <= 0.01; *** = p_val <= 0.001 
+asterisks <- function(p_vals){
+  blank <- p_vals > 0.05 
+  sig <- p_vals <= 0.05
+  hsig <- p_vals <= 0.01
+  hhsig <- p_vals <= 0.001
+  p_vals[blank] <- ""
+  p_vals[sig] <- "*"
+  p_vals[hsig] <- "**"
+  p_vals[hhsig] <- "***"
+  
+  return(p_vals)
+}
+
+# ' Calculate the standard error of the mean
+# ' source: https://stackoverflow.com/questions/2676554/in-r-how-to-find-the-standard-error-of-the-mean
+# ' @param x Numeric vector
+# ' @return Numeric indicating standard error of x
+std <- function(x) sd(x)/sqrt(length(x))
+
+# ' Capitalize first letters of all words in a string
+# ' source: https://stackoverflow.com/questions/6364783/capitalize-the-first-letter-of-both-words-in-a-two-word-string
+# ' @param x String
+# ' @return String
+simpleCap <- function(x) {
+  s <- strsplit(x, " ")[[1]]
+  paste(toupper(substring(s, 1,1)), substring(s, 2),
+        sep="", collapse=" ")
 }

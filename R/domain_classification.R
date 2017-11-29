@@ -105,3 +105,5 @@ for (D in DOMAINS$domain_path) {
 }
 
 write_tsv(domain_classes, "results/domain_classification.tsv")
+write_rds(domain_classes, "results/domain_classification.rds")
+

@@ -5,8 +5,11 @@
 
 require(tidyverse)
 require(ggplot2)
+require(RColorBrewer)
 require(ggsignif)
 require(stringr)
+
+source("R/functions.R")
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -42,7 +45,7 @@ BOUNDARY_EBIN <-  unlist(METADATA %>%
 )
 
 # =============================================================================================================================
-# Plot breakpoint distributions of all thresholds for one species (whole domain)
+# Plot breakpoint distributions (whole domain)
 # =============================================================================================================================
 
 # store results here
@@ -51,15 +54,43 @@ dir.create(out_dir, showWarnings = FALSE)
 
 data <- read_rds("results/breakpoints_at_domains.rds")
 
-# prepare data for plotting
-plot_data <- data %>% 
-  group_by(domains, species, threshold) %>%
-  # normalise breakpoint hits for each species and threshold 
-  mutate(hits = hits / sum(hits) * 100, 
-         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits),
-         # add 0.5 to each bin for cosmetic reasons
-         bin = bin + 0.5)
+# combine hits by sample replicates
+data_combined <- data %>% 
+  group_by(sample, replicate, species, threshold, domains) %>% 
+  mutate(
+    percent = hits / sum(hits) * 100
+  ) %>% 
+  ungroup() %>% 
+  group_by(bin, sample, species, threshold, domains) %>% 
+  summarise(
+    n = n(),
+    mean_hits = mean(hits),
+    sd_hits = sd(hits),
+    se_hits = std(hits),
+    mean_percent = mean(percent),
+    sd_percent = sd(percent),
+    se_percent = std(percent)
+  ) %>% 
+  ungroup() 
+
+# -------------------------------------------------------------------------------------------------------------------
+# Plot single species, all thresholds
+# -------------------------------------------------------------------------------------------------------------------
+
+# group sample and threshold together
+group_levels <- str_c(rep(c("real", "random"), 3), "_", rep(THRESHOLDS, each = 2))
+group_labels <- str_c(rep(c("Breakpoints", "Background"), 3), " ", rep(c("10 kb", "100 kb", "1000 kb"), each = 2))
+
+plot_data <- data_combined %>% 
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
+  mutate(sample_thr = str_c(sample, "_", threshold)) %>%
+  mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
+  arrange(threshold, desc(sample))
+
+# choose colors (sample is atlernating)
+group_cols <- c(brewer.pal(3,"Blues"), brewer.pal(3,"Greys"))
+group_cols <- group_cols[c(1, 4, 2, 5, 3, 6)]
+group_cols_transp = adjustcolor( group_cols, alpha.f = 0.2)
 
 for (D in DOMAINS$domain_type){
   
@@ -67,43 +98,26 @@ for (D in DOMAINS$domain_type){
     
     this_plot_data <- filter(plot_data, species == S, domains == D)
     
-    trivial_name <- unlist(SPECIES %>%
-                             filter(genome_assembly == S) %>%
-                             dplyr::select(trivial_name)
-    )
-    
+    trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
+
     ggplot(this_plot_data, 
-           aes(x = bin, y = hits, colour = factor(threshold))) +
-      geom_point() + 
+           aes(x = bin, y = mean_percent, colour = sample_thr, fill = sample_thr)) +
       geom_line() + 
-      geom_line(data = this_plot_data %>% 
-                  group_by(bin) %>%
-                  summarise(rdm_hits = mean(rdm_hits),
-                         rdm_hits_sd = mean(rdm_hits_sd)),
-                aes(x = bin, y = rdm_hits),
-                inherit.aes = FALSE) +
-     geom_ribbon(data = this_plot_data %>% 
-                   group_by(bin) %>%
-                   summarise(rdm_hits = mean(rdm_hits),
-                             rdm_hits_sd = mean(rdm_hits_sd)),
-                 aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-                 fill = "grey70", 
-                 alpha = 0.5, 
-                 inherit.aes = FALSE) + 
+      geom_ribbon(aes(ymin = mean_percent - se_percent,
+                      ymax = mean_percent + se_percent),
+                  color = NA, alpha = .1) +
+      scale_color_manual(values = group_cols) +
+      scale_fill_manual(values = group_cols) + 
       scale_x_discrete(name="", 
                        limits=seq(1,NBINS + 1,NBINS/4), 
                        labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
       geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
+      ylab("Breakpoints [%]") +
       
       # from here all cosmetics like background, title, line colors...
-      ggtitle(trivial_name) +
-      scale_colour_brewer("Chain sizes larger", 
-                          palette = "Blues", 
-                          labels = c("10 kb", "100 kb", "1000 kb")) +
-      ylab("Breakpoints [%]") +
       theme_classic() +
       theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
-            legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+            legend.title = element_blank(), legend.text = element_text(size = 11, face="bold"),
             legend.position = "bottom",
             axis.title.x = element_text(face="bold", size=11),
             axis.title.y = element_text(face="bold", size=11),
@@ -111,61 +125,59 @@ for (D in DOMAINS$domain_type){
             axis.text.y = element_text(face="bold", size=11),
             plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
     
-    ggsave(str_c(out_dir, trivial_name, "_whole.pdf"), w=6, h=4)
+    ggsave(str_c(out_dir, trivial_name, "_", D, "_whole.pdf"), w=6, h=4)
     
   }
 }
 
-# =============================================================================================================================
-# Plot breakpoint distributions for several species (whole domain)
-# =============================================================================================================================
-
-# store results here
-out_dir <- "results/whole_domain/"
-dir.create(out_dir, showWarnings = FALSE)
-
-data <- read_rds("results/breakpoints_at_domains.rds")
+# -------------------------------------------------------------------------------------------------------------------
+# Plot several species, single threshold
+# -------------------------------------------------------------------------------------------------------------------
 
 SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
-SPECIES_NAMES <- unname(unlist(SPECIES %>%
+SPECIES_NAMES <- map(unname(unlist(SPECIES %>%
                           filter(genome_assembly %in% SELECTED_SPECIES) %>%
                           dplyr::select(trivial_name)
                           )
-                        )
+                        ), simpleCap)
 
-# prepare data for plotting
-plot_data <- data %>% 
-  # <<< select species, domain and threshold here >>>
-  filter(species %in% SELECTED_SPECIES,
-         domains == "hESC",
-         threshold == "10000") %>%
-  # normalise breakpoint hits for each species and threshold 
-  group_by(domains, species, threshold) %>%
-  mutate(hits = hits / sum(hits) * 100, 
-         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits),
-         # add 0.5 to each bin for cosmetic reasons
-         bin = bin + 0.5) 
+NSPECIES <- length(SELECTED_SPECIES)
+NSAMPLES <- length(unique(data_combined$sample))
+NTHR <- length(THRESHOLDS)
+
+# reverse sample name positions
+SAMPLES <- unique(data_combined$sample)[length(unique(data_combined$sample)):1]
+
+# group species, sample and threshold together
+group_levels <- str_c(rep(SELECTED_SPECIES, NSAMPLES * NTHR),  
+                      rep(SAMPLES, each = NSPECIES * NTHR), 
+                      rep(THRESHOLDS, NSPECIES * NSAMPLES), 
+                      sep = "_")
+group_labels <- str_c(rep(SPECIES_NAMES, NSAMPLES * NTHR),
+                      rep(c("Breakpoints", "Background"), each = NSPECIES * NTHR),
+                      rep(c("10 kb", "100 kb", "1000 kb"), NSPECIES * NSAMPLES),
+                      sep = " ")
+
+plot_data <- data_combined %>% 
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
+  filter(species %in% SELECTED_SPECIES, threshold == 10000, domains == "hESC") %>%
+  mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
+  mutate(sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels))
+
+# choose colors (sample is atlernating)
+group_cols <- c(brewer.pal(3,"Reds"), brewer.pal(3,"Blues"), brewer.pal(3,"Greens"), brewer.pal(3,"Purples"))
+group_cols <- group_cols[c(3, 1, 6, 4, 9, 7, 12, 10)]
+group_cols_transp = adjustcolor( group_cols, alpha.f = 0.2)
+  
 
 ggplot(plot_data, 
-       aes(x = bin, y = hits, colour = species)) +
-  geom_point() + 
+       aes(x = bin, y = mean_percent, colour = species_sample_thr, fill = species_sample_thr)) +
   geom_line() + 
-  geom_line(data = plot_data %>% 
-              group_by(bin) %>%
-              summarise(rdm_hits = mean(rdm_hits),
-                        rdm_hits_sd = mean(rdm_hits_sd)),
-            aes(x = bin, y = rdm_hits),
-            inherit.aes = FALSE) +
-  geom_ribbon(data = plot_data %>% 
-                group_by(bin) %>%
-                summarise(rdm_hits = mean(rdm_hits),
-                          rdm_hits_sd = mean(rdm_hits_sd)),
-              aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-              fill = "grey70", 
-              alpha = 0.5, 
-              inherit.aes = FALSE) + 
-  scale_color_brewer("", palette = "Set1", labels = SPECIES_NAMES) +
+  # geom_ribbon(aes(ymin = mean_percent - se_percent,
+                 # ymax = mean_percent + se_percent),
+              # color = NA, alpha = .1) +
+  scale_color_manual(values = group_cols) +
+  scale_fill_manual(values = group_cols) +
   scale_x_discrete(name="", 
                    limits=seq(1,NBINS + 1,NBINS/4), 
                    labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
@@ -279,8 +291,8 @@ SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
 SPECIES_NAMES <- unname(unlist(SPECIES %>%
                                  filter(genome_assembly %in% SELECTED_SPECIES) %>%
                                  dplyr::select(trivial_name)
-)
-)
+                               )
+                        )
 
 # prepare data for plotting
 plot_data <- data %>% 
