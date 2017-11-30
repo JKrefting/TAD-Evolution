@@ -7,19 +7,6 @@ require(biomaRt)
 require(tidyverse)
 require(stringr)
 
-# source("R/functions.R")
-
-# # Read metadata for analysis
-# METADATA <- read_tsv("metadata.csv")
-# SPECIES <- dplyr::select(METADATA, genome_assembly, trivial_name)
-# DOMAINS <- METADATA %>% 
-#   dplyr::select(genomic_domain_type, genomic_domain_path) %>%
-#   filter(!is.na(genomic_domain_type))
-# THRESHOLDS <- unlist(METADATA %>% 
-#                        filter(!is.na(min_size_threshold)) %>%
-#                        dplyr::select(min_size_threshold)
-# )
-
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
 DOMAINS <- read_tsv("domains_meta.tsv")
@@ -77,12 +64,6 @@ orth_attr = c("ensembl_gene_id",  "mmusculus_homolog_ensembl_gene",
               "mmusculus_homolog_orthology_type", 
               "mmusculus_homolog_orthology_confidence")
 
-# filters = c("biotype", "chromosome_name"),
-# values = list(
-#   biotype = "protein_coding", 
-#   chromosome_name = c(1:22, "X", "Y")),
-
-
 # Query orthologs by human gene ID
 orthologsDF = getBM(attributes = orth_attr, mart = ensembl) 
 
@@ -90,9 +71,8 @@ orthologsDF = getBM(attributes = orth_attr, mart = ensembl)
 orthologs <- as.tibble(orthologsDF) %>% 
   filter(
     mmusculus_homolog_ensembl_gene != "",
-    mmusculus_homolog_orthology_type == "ortholog_one2one",
-    mmusculus_homolog_orthology_confidence == 1) 
-
+    mmusculus_homolog_orthology_type == "ortholog_one2one"
+    )
 
 # filter orthologs for genes contained in human expression data
 orthologs_with_exp <- orthologs %>%
@@ -119,17 +99,13 @@ mouse_expr <- left_join(orthologs_with_exp, mouse_expr, by = "mmusculus_homolog_
 # Calculate correlations
 # --------------------------------------------------------------------------------------------  
 
+# compute expression correlation across all matching tissues
 cor_values <- map_dbl(1:nrow(human_expr), 
                       ~ cor(as.numeric(human_expr[.x, 4:ncol(human_expr)]), 
                             as.numeric(mouse_expr[.x, 4:ncol(mouse_expr)]),
                             method = "pearson")
                       ) 
 
-
-# # make correlations identifiable by human gene id
-# correlations <- tibble(
-#   ensembl_gene_id = human_expr$ensembl_gene_id,
-#   correlation = cor_values)
 
 # Build table with ortholy assignment, and correlation
 correlationDF <- orthologs_with_exp %>% 
