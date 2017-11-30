@@ -1,16 +1,21 @@
 require(tidyverse)
-require(ggplot2)
 require(RColorBrewer)
 require(ggsignif)
 
-data <- read_rds("results/ortholog_expression_correlation_old.rds")
+# data <- read_rds("results/ortholog_expression_correlation_old.rds")
+data <- read_rds("results/ortholog_expression_correlation.rds")
 
 data_stats <- data %>%
   group_by(domain_type, category) %>%
   summarise(count = n(), 
             n_tads = length(unique(domain_id)))
 
-plot_data <- filter(data, domain_type == "hESC", !is.na(category), !is.na(correlation))
+plot_data <- data %>% 
+  filter(
+    domain_type == "hESC", 
+    !is.na(category), 
+    !is.na(correlation)
+    )
 
 # my_palette = c(brewer.pal(5, "Dark2")[2], brewer.pal(5, "Set1")[c(2, 1, 3)])
 my_palette = brewer.pal(5, "Set1")[c(2, 1, 3)]
@@ -56,4 +61,4 @@ ggplot(plot_data, aes(x = category, y = correlation)) +
           plot.margin=unit(c(0.1,0.5,0,0.5), "cm")) +
     ylim(c(-1, 1.35)) + 
     xlab("") + 
-    ylab("Pearson correlation coefficient")
+    ylab("Ortholog expression correlation")
