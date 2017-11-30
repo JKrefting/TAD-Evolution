@@ -14,6 +14,12 @@ THRESHOLDS <- unlist(METADATA %>%
                        dplyr::select(min_size_threshold)
 )
 
+#Conserved domains do NOT have breakpoints from all thresholds (smallest size threshold)
+CONSV_BP_THR <- THRESHOLDS[1]
+# Rearranged domains have breakpoints from the largest threshold
+REARR_BP_THR <- THRESHOLDS[3]
+
+
 # Load human seqinfo
 genome <- BSgenome.Hsapiens.UCSC.hg19
 hum_seqinfo <- seqinfo(genome)
@@ -46,13 +52,13 @@ for (D in DOMAINS$domain_path) {
   )
   
   # shrink domains to accommodate data resolution
-  domains_minus <- resize(domains, fix = "center", 
-                          ifelse(width(domains) - (4 * domain_res) <= 0, 
-                                  1, 
+  domains_minus <- resize(domains, fix = "center",
+                          ifelse(width(domains) - (4 * domain_res) <= 0,
+                                  1,
                                  width(domains) - (4 * domain_res)
                                  )
                           )
-  
+
   for (S in SPECIES$genome_assembly) {
     
     print(S)
@@ -68,25 +74,17 @@ for (D in DOMAINS$domain_path) {
     for (THR in THRESHOLDS){
       # for each syntenic block size threshold, check if a rearrangement breakpoint 
       # occurrs inside a domain with a safety margin of at least 40 kb to each TAD boundary
+      print(THR)
       
       breakpoints <- readBPFile(S, THR)
-      
-      # handle case of no breakpoints for threshold
-      if (length(breakpoints) < 1){
-        rearr_this_thr <- tibble(rearranged_by_breakpoint = rep(NA, length(domains)),
-                                 threshold = rep(THR, length(domains))
-        )
-        rearr_all_thr <- rbind.data.frame(rearr_all_thr, rearr_this_thr)
-        next
-      }
-      
+
       # find rearranged domains
       rearr_by_bp <- overlapsAny(domains_minus, breakpoints)
       
       # tibble to gather results for each threshold
       rearr_this_thr <- tibble(rearranged_by_breakpoint = rearr_by_bp,
                                threshold = THR)
-      rearr_all_thr <- rbind.data.frame(rearr_all_thr, rearr_this_thr)
+      rearr_all_thr <- bind_rows(rearr_all_thr, rearr_this_thr)
     }
     
     # tibble for domain classification by species
@@ -98,7 +96,7 @@ for (D in DOMAINS$domain_path) {
                                          species = S
     )
     
-    domain_classes <- rbind.data.frame(domain_classes, domain_classes_by_species)
+    domain_classes <- bind_rows(domain_classes, domain_classes_by_species)
     
   }
   
@@ -107,23 +105,9 @@ for (D in DOMAINS$domain_path) {
 write_tsv(domain_classes, "results/domain_classification.tsv")
 write_rds(domain_classes, "results/domain_classification.rds")
 
-# =============================================================================================================================
+#===============================================================================
 # calssify each TAD for each species in either "conserved" or "rearraged" 
-# =============================================================================================================================
-# domain_classes <- read_rds("results/domain_classification.rds")
-
-# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
-THRESHOLDS <- unlist(METADATA %>% 
-                       filter(!is.na(min_size_threshold)) %>%
-                       dplyr::select(min_size_threshold)
-)
-
-#Conserved domains do NOT have breakpoints from all thresholds (smallest size threshold)
-CONSV_BP_THR <- THRESHOLDS[1]
-# Rearranged domains have breakpoints from the largest threshold
-REARR_BP_THR <- THRESHOLDS[3]
-
-#----------------------
+#===============================================================================
 
 # get subset with conserved threshold
 domains_conserved_th <- domain_classes %>% 
@@ -149,7 +133,6 @@ tidy_domain_groups <- tidy_domain_groups %>%
             by = c("domain_id", "domain_type", "species")) 
 
 
-
 # add conserved and rearranged categories as columns
 tidy_domain_groups <- tidy_domain_groups %>% 
   mutate(
@@ -164,17 +147,4 @@ tidy_domain_groups <- tidy_domain_groups %>%
 # save to output file
 write_rds(tidy_domain_groups, "results/tidy_domain_groups.rds")
 
-#-------------------------------------------------------------------------------
-# count categories
-#-------------------------------------------------------------------------------
-tidy_domain_groups %>% count(conserved, rearranged, category) %>% 
-  write_tsv("results/tidy_domain_groups.category_counts.tsv")
-
-tidy_domain_groups %>% count(species, domain_type, conserved, rearranged, category) %>% 
-  write_tsv("results/tidy_domain_groups.species_domain_category_counts.tsv")
-
-# #### DEBUG ####
-# tidy_domain_groups %>%
-#   filter(species == "mm10", domain_type == "hESC") %>% 
-#   count(category)
 
