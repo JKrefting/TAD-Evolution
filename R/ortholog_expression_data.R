@@ -23,13 +23,21 @@ dir.create(dirname(output_prefix), recursive = TRUE, showWarnings = FALSE)
 # Read data
 #-------------------------------------------------------------------------------
 
+replaceNAwithZero <- function(x){
+  x[is.na(x)] <- 0
+  return(x)
+}
+
 # read human data
 human_exp <- str_c(human_exp_prefix, expression_suffix) %>% 
   read_tsv(comment = "#", col_types = cols(
     .default = col_double(),
     `Gene ID` = col_character(),
     `Gene Name` = col_character()
-  ))
+  )) %>% 
+  # treat missing expression values as zeros
+  mutate_at(replaceNAwithZero, .vars = 3:ncol(.))
+
 
 human_design <- str_c(human_exp_prefix, metadata_suffix) %>% 
   read_tsv(col_types = cols(.default = col_character()))
@@ -40,7 +48,9 @@ mouse_exp <- str_c(mouse_exp_prefix, expression_suffix) %>%
     .default = col_double(),
     `Gene ID` = col_character(),
     `Gene Name` = col_character()
-  ))
+  )) %>% 
+  # treat missing expression values as zeros
+  mutate_at(replaceNAwithZero, .vars = 3:ncol(.))
 
 mouse_design <- str_c(mouse_exp_prefix, metadata_suffix) %>% 
   read_tsv(col_types = cols(.default = col_character()))
