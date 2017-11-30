@@ -32,16 +32,6 @@ NCONTROLS <- unlist(METADATA %>%
                       dplyr::select(n_controls)
 )
 
-# area around a boundary that is investigated for breakpoint enrichment (only relevant for 2nd analysis)
-BOUNDARY_AREA <-  unlist(METADATA %>% 
-                         filter(!is.na(boundary_plus_adjacence)) %>%
-                         dplyr::select(boundary_plus_adjacence)
-)
-
-# Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
-
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints around structural domains
 # -------------------------------------------------------------------------------------------------------------------
@@ -157,6 +147,16 @@ write_rds(results, "results/breakpoints_at_domains.rds")
 # Analysis of breakpoints at BOUNDARIES of structural domains
 # -------------------------------------------------------------------------------------------------------------------
 
+# area around a boundary that is investigated for breakpoint enrichment
+BOUNDARY_AREA <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_plus_adjacence)) %>%
+                           dplyr::select(boundary_plus_adjacence)
+)
+
+# Load human seqinfo
+genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(genome)
+
 domain_result_list <- map(DOMAINS$domain_path, function(D){
   
   domains <- import(unlist(D), seqinfo = hum_seqinfo)
@@ -200,7 +200,7 @@ domain_result_list <- map(DOMAINS$domain_path, function(D){
           replicate = 1,
           species = S,
           threshold = THR,
-          boundaries = domain_type,
+          domains = domain_type,
           n_breakpoints = length(breakpoints)
         )
         
