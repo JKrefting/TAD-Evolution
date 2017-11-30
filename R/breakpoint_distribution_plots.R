@@ -16,36 +16,8 @@ SPECIES <- read_tsv("species_meta.tsv")
 DOMAINS <- read_tsv("domains_meta.tsv")
 METADATA <- read_tsv("metadata.tsv")
 
-# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
-THRESHOLDS <- unlist(METADATA %>% 
-                       filter(!is.na(min_size_threshold)) %>%
-                       dplyr::select(min_size_threshold)
-)
-
-# number of bins where breakpoint distribution is investigated
-NBINS <- unlist(METADATA %>% 
-                  filter(!is.na(n_bins)) %>%
-                  dplyr::select(n_bins)
-)
-
-# area around a boundary where breakpoint distribution is investigated (only relevant for 2nd analysis)
-BOUNDARY_PLUS <-  unlist(METADATA %>% 
-                           filter(!is.na(boundary_plus_adjacence)) %>%
-                           dplyr::select(boundary_plus_adjacence)
-)
-
-# bins (around boundaries) that are investigated for breakpoint enrichment (only relevant for 2nd analysis)
-BOUNDARY_SBIN <-  unlist(METADATA %>% 
-                           filter(!is.na(boundary_area_start_bin)) %>%
-                           dplyr::select(boundary_area_start_bin)
-)
-BOUNDARY_EBIN <-  unlist(METADATA %>% 
-                                filter(!is.na(boundary_area_end_bin)) %>%
-                                dplyr::select(boundary_area_end_bin)
-)
-
 # =============================================================================================================================
-# Plot breakpoint distributions (whole domain)
+# Plot breakpoint distributions at whole domain
 # =============================================================================================================================
 
 # store results here
@@ -73,6 +45,18 @@ data_combined <- data %>%
   ) %>% 
   ungroup() 
 
+# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
+THRESHOLDS <- unlist(METADATA %>% 
+                       filter(!is.na(min_size_threshold)) %>%
+                       dplyr::select(min_size_threshold)
+)
+
+# number of bins where breakpoint distribution is investigated
+NBINS <- unlist(METADATA %>% 
+                  filter(!is.na(n_bins)) %>%
+                  dplyr::select(n_bins)
+)
+
 # -------------------------------------------------------------------------------------------------------------------
 # Plot single species, all thresholds
 # -------------------------------------------------------------------------------------------------------------------
@@ -90,7 +74,6 @@ plot_data <- data_combined %>%
 # choose colors (sample is atlernating)
 group_cols <- c(brewer.pal(3,"Blues"), brewer.pal(3,"Greys"))
 group_cols <- group_cols[c(1, 4, 2, 5, 3, 6)]
-group_cols_transp = adjustcolor( group_cols, alpha.f = 0.2)
 
 for (D in DOMAINS$domain_type){
   
@@ -134,41 +117,43 @@ for (D in DOMAINS$domain_type){
 # Plot several species, single threshold
 # -------------------------------------------------------------------------------------------------------------------
 
+# determine species, threshold, domain to be plotted
 SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
 SPECIES_NAMES <- map(unname(unlist(SPECIES %>%
-                          filter(genome_assembly %in% SELECTED_SPECIES) %>%
-                          dplyr::select(trivial_name)
-                          )
-                        ), simpleCap)
+                                     filter(genome_assembly %in% SELECTED_SPECIES) %>%
+                                     dplyr::select(trivial_name)
+)
+), simpleCap)
+
+THR <- THRESHOLDS[1]
+D <- DOMAINS$domain_type[1]
 
 NSPECIES <- length(SELECTED_SPECIES)
 NSAMPLES <- length(unique(data_combined$sample))
 NTHR <- length(THRESHOLDS)
 
-# reverse sample name positions
-SAMPLES <- unique(data_combined$sample)[length(unique(data_combined$sample)):1]
+# sample names
+SAMPLES <- unique(data_combined$sample)
 
 # group species, sample and threshold together
-group_levels <- str_c(rep(SELECTED_SPECIES, NSAMPLES * NTHR),  
-                      rep(SAMPLES, each = NSPECIES * NTHR), 
-                      rep(THRESHOLDS, NSPECIES * NSAMPLES), 
+group_levels <- str_c(rep(SELECTED_SPECIES, each = NSAMPLES),  
+                      rep(SAMPLES, NSPECIES), 
+                      rep(THR, NSPECIES * NSAMPLES), 
                       sep = "_")
-group_labels <- str_c(rep(SPECIES_NAMES, NSAMPLES * NTHR),
-                      rep(c("Breakpoints", "Background"), each = NSPECIES * NTHR),
-                      rep(c("10 kb", "100 kb", "1000 kb"), NSPECIES * NSAMPLES),
+group_labels <- str_c(rep(SPECIES_NAMES, each = NSAMPLES),
+                      rep(c("Breakpoints", "Background"), NSPECIES),
+                      rep(c("10 kb"), NSPECIES * NSAMPLES),
                       sep = " ")
 
 plot_data <- data_combined %>% 
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
-  filter(species %in% SELECTED_SPECIES, threshold == 10000, domains == "hESC") %>%
+  filter(species %in% SELECTED_SPECIES, threshold == THR, domains == D) %>%
   mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
-  mutate(sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels))
+  mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels))
 
 # choose colors (sample is atlernating)
 group_cols <- c(brewer.pal(3,"Reds"), brewer.pal(3,"Blues"), brewer.pal(3,"Greens"), brewer.pal(3,"Purples"))
-group_cols <- group_cols[c(3, 1, 6, 4, 9, 7, 12, 10)]
-group_cols_transp = adjustcolor( group_cols, alpha.f = 0.2)
-  
+group_cols <- group_cols[c(2, 3, 5, 6, 8, 9, 11, 12)]
 
 ggplot(plot_data, 
        aes(x = bin, y = mean_percent, colour = species_sample_thr, fill = species_sample_thr)) +
@@ -200,7 +185,7 @@ ggsave(str_c(out_dir, str_c(SPECIES_NAMES, collapse = "_"), "_whole.pdf"), w=6, 
 
 
 # =============================================================================================================================
-# Plot breakpoint distributions of all thresholds for one species (at boundaries)
+# Plot breakpoint distributions at boundaries
 # =============================================================================================================================
 
 # store results here
@@ -209,47 +194,72 @@ dir.create(out_dir, showWarnings = FALSE)
 
 data <- read_rds("results/breakpoints_at_boundaries.rds")
 
-# prepare data for plotting
-plot_data <- data %>% 
-  group_by(boundaries, species, threshold) %>%
-  # normalise breakpoint hits for each species and threshold 
-  mutate(hits = hits / sum(hits) * 100, 
-         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits),
-         bin = bin + 0.5)
+# combine hits by sample replicates
+data_combined <- data %>% 
+  group_by(sample, replicate, species, threshold, domains) %>% 
+  mutate(
+    percent = hits / sum(hits) * 100
+  ) %>% 
+  ungroup() %>% 
+  group_by(bin, sample, species, threshold, domains) %>% 
+  summarise(
+    n = n(),
+    mean_hits = mean(hits),
+    sd_hits = sd(hits),
+    se_hits = std(hits),
+    mean_percent = mean(percent),
+    sd_percent = sd(percent),
+    se_percent = std(percent)
+  ) %>% 
+  ungroup() 
+
+# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
+THRESHOLDS <- unlist(METADATA %>% 
+                       filter(!is.na(min_size_threshold)) %>%
+                       dplyr::select(min_size_threshold)
+)
+
+# area around a boundary where breakpoint distribution is investigated 
+BOUNDARY_PLUS <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_plus_adjacence)) %>%
+                           dplyr::select(boundary_plus_adjacence)
+)
+
+# -------------------------------------------------------------------------------------------------------------------
+# Plot single species, all thresholds
+# -------------------------------------------------------------------------------------------------------------------
+
+# group sample and threshold together
+group_levels <- str_c(rep(c("real", "random"), 3), "_", rep(THRESHOLDS, each = 2))
+group_labels <- str_c(rep(c("Breakpoints", "Background"), 3), " ", rep(c("10 kb", "100 kb", "1000 kb"), each = 2))
+
+plot_data <- data_combined %>% 
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
+  mutate(sample_thr = str_c(sample, "_", threshold)) %>%
+  mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
+  arrange(threshold, desc(sample))
+
+# choose colors (sample is atlernating)
+group_cols <- c(brewer.pal(3,"Blues"), brewer.pal(3,"Greys"))
+group_cols <- group_cols[c(1, 4, 2, 5, 3, 6)]
 
 for (D in DOMAINS$domain_type){
   
   for (S in SPECIES$genome_assembly) {
     
-    this_plot_data <- filter(plot_data, species == S, boundaries == D)
+    this_plot_data <- filter(plot_data, species == S, domains == D)
     
-    trivial_name <- unlist(SPECIES %>%
-                             filter(genome_assembly == S) %>%
-                             dplyr::select(trivial_name)
-    )
-    
-    plot_title <- trivial_name
+    trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
     
     ggplot(this_plot_data, 
-           aes(x = bin, y = hits, colour = threshold)) + # breakpoint distribution
-      geom_point() + 
+           aes(x = bin, y = mean_percent, colour = sample_thr, fill = sample_thr)) +
       geom_line() + 
-      geom_line(data = this_plot_data %>% 
-                  group_by(bin) %>%
-                  summarise(rdm_hits = mean(rdm_hits),
-                            rdm_hits_sd = mean(rdm_hits_sd)), # random distribution (was normalised over all thresholds)
-                aes(x = bin, y = rdm_hits),
-                inherit.aes = FALSE) +
-      geom_ribbon(data = this_plot_data %>% 
-                    group_by(bin) %>%
-                    summarise(rdm_hits = mean(rdm_hits),
-                              rdm_hits_sd = mean(rdm_hits_sd)), # add sd for random breakpoints
-                  aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-                  fill = "grey70", 
-                  alpha = 0.5, 
-                  inherit.aes = FALSE) + 
-      scale_x_discrete(name = "Distance to TAD boundary [kb]", 
+      geom_ribbon(aes(ymin = mean_percent - se_percent,
+                      ymax = mean_percent + se_percent),
+                  color = NA, alpha = .1) +
+      scale_color_manual(values = group_cols) +
+      scale_fill_manual(values = group_cols) + 
+      scale_x_discrete(name = "Distance to boundary [kb]", 
                        limits=seq(1,NBINS+1,NBINS/4), 
                        labels=c(as.character(-(BOUNDARY_PLUS/1000)), as.character(-(BOUNDARY_PLUS/2000)), 0, 
                                 as.character((BOUNDARY_PLUS/2000)), as.character((BOUNDARY_PLUS/1000)))) +
@@ -258,10 +268,6 @@ for (D in DOMAINS$domain_type){
       # annotate("rect", xmin=9, xmax=13, ymin=-Inf, ymax=Inf, alpha=0.6, fill="grey90") + 
       
       # from here all cosmetics like background, title, line colors...
-      ggtitle(plot_title) +
-      scale_colour_brewer("Chain sizes larger", 
-                          palette = "Blues", 
-                          labels = c("10 kb", "100 kb", "1000 kb")) +
       ylab("Breakpoints [%]") +
       theme_classic() +
       theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
@@ -277,56 +283,57 @@ for (D in DOMAINS$domain_type){
     
   }
 }
-# =============================================================================================================================
-# Plot breakpoint distributions for several species (at boundaries)
-# =============================================================================================================================
 
-# store results here
-out_dir <- "results/boundaries/"
-dir.create(out_dir, showWarnings = FALSE)
+# -------------------------------------------------------------------------------------------------------------------
+# Plot several species, single threshold
+# -------------------------------------------------------------------------------------------------------------------
 
-data <- read_rds("results/breakpoints_at_boundaries.rds")
-
+# determine species, threshold, domain to be plotted
 SELECTED_SPECIES <- c("panTro5", "bosTau8", "monDom5", "danRer10")
-SPECIES_NAMES <- unname(unlist(SPECIES %>%
-                                 filter(genome_assembly %in% SELECTED_SPECIES) %>%
-                                 dplyr::select(trivial_name)
-                               )
-                        )
+SPECIES_NAMES <- map(unname(unlist(SPECIES %>%
+                                     filter(genome_assembly %in% SELECTED_SPECIES) %>%
+                                     dplyr::select(trivial_name)
+)
+), simpleCap)
 
-# prepare data for plotting
-plot_data <- data %>% 
-  # <<< select species, domain and threshold here >>>
-  filter(species %in% SELECTED_SPECIES,
-         boundaries == "hESC",
-         threshold == "10000") %>%
-  # normalise breakpoint hits for each species and threshold 
-  group_by(boundaries, species, threshold) %>%
-  mutate(hits = hits / sum(hits) * 100, 
-         rdm_hits = rdm_hits / sum(rdm_hits) * 100,
-         rdm_hits_sd = sd(rdm_hits),
-         # add 0.5 to each bin for cosmetic reasons
-         bin = bin + 0.5) 
+THR <- THRESHOLDS[1]
+D <- DOMAINS$domain_type[1]
+
+NSPECIES <- length(SELECTED_SPECIES)
+NSAMPLES <- length(unique(data_combined$sample))
+NTHR <- length(THRESHOLDS)
+
+# sample names
+SAMPLES <- unique(data_combined$sample)
+
+# group species, sample and threshold together
+group_levels <- str_c(rep(SELECTED_SPECIES, each = NSAMPLES),  
+                      rep(SAMPLES, NSPECIES), 
+                      rep(THR, NSPECIES * NSAMPLES), 
+                      sep = "_")
+group_labels <- str_c(rep(SPECIES_NAMES, each = NSAMPLES),
+                      rep(c("Breakpoints", "Background"), NSPECIES),
+                      rep(c("10 kb"), NSPECIES * NSAMPLES),
+                      sep = " ")
+
+plot_data <- data_combined %>% 
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
+  filter(species %in% SELECTED_SPECIES, threshold == THR, domains == D) %>%
+  mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
+  mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels))
+
+# choose colors (sample is atlernating)
+group_cols <- c(brewer.pal(3,"Reds"), brewer.pal(3,"Blues"), brewer.pal(3,"Greens"), brewer.pal(3,"Purples"))
+group_cols <- group_cols[c(2, 3, 5, 6, 8, 9, 11, 12)]
 
 ggplot(plot_data, 
-       aes(x = bin, y = hits, colour = species)) +
-  geom_point() + 
+       aes(x = bin, y = mean_percent, colour = species_sample_thr, fill = species_sample_thr)) +
   geom_line() + 
-  geom_line(data = plot_data %>% 
-              group_by(bin) %>%
-              summarise(rdm_hits = mean(rdm_hits),
-                        rdm_hits_sd = mean(rdm_hits_sd)),
-            aes(x = bin, y = rdm_hits),
-            inherit.aes = FALSE) +
-  geom_ribbon(data = plot_data %>% 
-                group_by(bin) %>%
-                summarise(rdm_hits = mean(rdm_hits),
-                          rdm_hits_sd = mean(rdm_hits_sd)),
-              aes(x = bin, ymin = rdm_hits - rdm_hits_sd, ymax = rdm_hits + rdm_hits_sd),
-              fill = "grey70", 
-              alpha = 0.5, 
-              inherit.aes = FALSE) + 
-  scale_color_brewer("", palette = "Set1", labels = SPECIES_NAMES) +
+  # geom_ribbon(aes(ymin = mean_percent - se_percent,
+  # ymax = mean_percent + se_percent),
+  # color = NA, alpha = .1) +
+  scale_color_manual(values = group_cols) +
+  scale_fill_manual(values = group_cols) +
   scale_x_discrete(name = "Distance to TAD boundary [kb]", 
                    limits=seq(1,NBINS+1,NBINS/4), 
                    labels=c(as.character(-(BOUNDARY_PLUS/1000)), as.character(-(BOUNDARY_PLUS/2000)), 0, 
@@ -358,6 +365,28 @@ data <- read_rds("results/breakpoints_at_boundaries.rds")
 test_data <- data %>% 
   filter(boundaries %in% c("hESC", "GM12878"))
 
+# minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
+THRESHOLDS <- unlist(METADATA %>% 
+                       filter(!is.na(min_size_threshold)) %>%
+                       dplyr::select(min_size_threshold)
+)
+
+# number of bins where breakpoint distribution is investigated
+NBINS <- unlist(METADATA %>% 
+                  filter(!is.na(n_bins)) %>%
+                  dplyr::select(n_bins)
+)
+
+# bins (around boundaries) that are investigated for breakpoint enrichment (only relevant for 2nd analysis)
+BOUNDARY_SBIN <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_area_start_bin)) %>%
+                           dplyr::select(boundary_area_start_bin)
+)
+BOUNDARY_EBIN <-  unlist(METADATA %>% 
+                           filter(!is.na(boundary_area_end_bin)) %>%
+                           dplyr::select(boundary_area_end_bin)
+)
+
 # -------------------------------------------------------------------------------------------------------------------
 # Compute a fisher test for comparing the amount of breakpoints inside the range BOUNDARY_SBIN, BOUNDARY_EBIN to
 # the proportion of breakpoints outside that range to the ratio of random breakpoints.
@@ -369,13 +398,13 @@ OTHER_BINS <- seq(1, NBINS)[-TEST_BINS]
 
 # sum up breakpoints and random breakpoints for test and other bins
 fisher_input <- test_data %>%
-  group_by(boundaries, threshold, species) %>%
-  summarise(bp_test_sum = sum(hits[bin %in% TEST_BINS]),
-            rdm_test_sum = sum(rdm_hits[bin %in% TEST_BINS]),
-            bp_other_sum = sum(hits[bin %in% OTHER_BINS]),
-            rdm_other_sum = sum(rdm_hits[bin %in% OTHER_BINS]))
+  group_by(domains, threshold, species) %>%
+  summarise(bp_test_sum = sum(hits[bin %in% TEST_BINS & sample == "real"]),
+            rdm_test_sum = sum(rdm_hits[bin %in% TEST_BINS & sample == "random"]),
+            bp_other_sum = sum(hits[bin %in% OTHER_BINS & sample == "real"]),
+            rdm_other_sum = sum(rdm_hits[bin %in% OTHER_BINS & sample == "random"]))
 
-results <- tibble()
+fisher_results <- tibble()
 
 for (D in unique(test_data$boundaries)){
     
@@ -406,7 +435,7 @@ for (D in unique(test_data$boundaries)){
       # gather results in data frame
       tmp <- tibble(boundaries = factor(D), species = factor(trivial_name), threshold = factor(THR), 
                     p_value = test_result$p.value, odds_ratio = test_result$estimate)
-      results <- rbind.data.frame(results, tmp)
+    fisher_results <- rbind.data.framefisher_results, tmp)
     }
   }
 }
@@ -415,7 +444,7 @@ for (D in unique(test_data$boundaries)){
 # Plot fisher odds ratios (log_2)
 # -------------------------------------------------------------------------------------------------------------------
 
-ggplot(results, aes(x = species, y = log2(odds_ratio), group=threshold))+ 
+ggplot(fisher_results, aes(x = species, y = log2(odds_ratio), group=threshold))+ 
   geom_bar(aes(fill=threshold),
                   stat="identity", position="dodge", width=0.5) +
   geom_text(aes(label=asterisks(p_value), y = ifelse(odds_ratio < 1, 0, log2(odds_ratio))), 
