@@ -7,7 +7,7 @@ require(biomaRt)
 require(tidyverse)
 require(stringr)
 
-source("R/functions.R")
+# source("R/functions.R")
 
 # # Read metadata for analysis
 # METADATA <- read_tsv("metadata.csv")
@@ -125,6 +125,7 @@ cor_values <- map_dbl(1:nrow(human_expr),
                             method = "pearson")
                       ) 
 
+
 # # make correlations identifiable by human gene id
 # correlations <- tibble(
 #   ensembl_gene_id = human_expr$ensembl_gene_id,
@@ -163,6 +164,7 @@ tssDF <- as.tibble(hum_tss_df) %>%
   # Filter for valid names
   filter(chr %in% seqnames(hum_seqinfo))
 
+write_rds(tssDF, "results/ortholog_expression.tssDF.rds")
 
 # 
 # hum_tss_df <- hum_tss_df[ ,1:4]
@@ -183,89 +185,51 @@ hum_tss_gr <- GRanges(seqnames = tssDF$chr,
                    seqinfo = hum_seqinfo
                    )
 write_rds(hum_tss_gr, "results/ortholog_expression.hum_tss_gr.rds")
+
 # --------------------------------------------------------------------------------------------
-# Start building final result tibble
+# Assign genes to TADs
 # --------------------------------------------------------------------------------------------  
 
-# add ortholog gene info (if present) to ALL tss retrieved
-inter_results <- tssDF %>%
-  left_join(dplyr::select(human_expr, 1:4), by = "ensembl_gene_id")
+genes_to_domains <- DOMAINS %>% 
+  mutate(
+    # read domains form BED files as GRanges
+    domainGR = map(domain_path, import.bed, seqinfo = hum_seqinfo),
+    # compute overlap between TSS and domains
+    hits = map(domainGR, ~ findOverlaps(hum_tss_gr, .x, ignore.strand = TRUE)),
+    # convert overlaps to tibble
+    hitsDF = map(hits, ~as.tibble(as.data.frame(.x))),
+    # add all possible human gene indices
+    hitsDF = map(hitsDF, right_join, tibble(queryHits = 1:length(hum_tss_gr)), by = "queryHits")
+  ) %>% 
+  select(domain_type, hitsDF) %>% 
+  # unpack overlap hits and rename
+  unnest(hitsDF) %>% 
+  mutate(
+    ensembl_gene_id = hum_tss_gr$geneID[queryHits],
+    domain_id = subjectHits
+  ) %>% 
+  select(ensembl_gene_id, domain_type, domain_id)
 
-# add the correlation results to otrholog pairs
-inter_results <- inter_results %>%
-  left_join(correlationDF, by = "ensembl_gene_id")
-
-# --------------------------------------------------------------------------------------------
-# Assign the domains to ortholog pair in 'results' if overlapping with human TSS,
-# then denote conserved or rerranged status of each domain
-# -------------------------------------------------------------------------------------------- 
-
-domain_classes <- read_rds("results/domain_classification_fills.rds")
-
-tmp <- tibble()
-
-for (D in DOMAINS$domain_path) {
-  
-  domains <- import(unlist(D), seqinfo = hum_seqinfo)
-  
-  # get domain type to store with every result
-  domain_type <- DOMAINS %>%
-    filter(domain_path == D) %>%
-    dplyr::select(domain_type) %>% 
-    pull()
-
-  # to add columns to results, then rbind loop results
-  results_loop <- inter_results
-  
-  # determine gene association to domain
-  tss_domain_hits <- findOverlaps(hum_tss_gr, domains)
-  
-  # add associated domain (if present) to orthologs
-  # NOTE: order of genes in hum_tss_gr and results_loop (inter_results) equal
-  results_loop$domain_id <- NA
-  results_loop[queryHits(tss_domain_hits), ]$domain_id <- subjectHits(tss_domain_hits)
-  results_loop$domain_type <- domain_type
-  
-  # categorise domain as conserved, identifiable by domain id
-  conserved <- domain_classes %>%
-    filter(domain_type == domain_type,
-           species == "mm10",
-           threshold == CONSV_BP_THR
-    ) %>%
-    transmute(domain_id = domain_id,
-              conserved = enclosed_by_chain & !rearranged_by_breakpoint)
-  
-  # categorise domain as rearranged
-  rearranged <- domain_classes %>%
-    filter(domain_type == domain_type,
-           species == "mm10",
-           threshold == REARR_BP_THR
-    ) %>%
-    transmute(domain_id = domain_id,
-              rearranged = !enclosed_by_chain & rearranged_by_breakpoint)
-  
-  # add conserved / rearranged info of domains by merging by domain id
-  results_loop$conserved <- conserved[match(results_loop$domain_id, conserved$domain_id), ]$conserved 
-  results_loop$rearranged <- rearranged[match(results_loop$domain_id, rearranged$domain_id), ]$rearranged 
-  
-  
-  # determine genes outside any domain
-  results_loop$outside <- !overlapsAny(hum_tss_gr, domains)
-  
-  tmp <- rbind.data.frame(tmp, results_loop)
-}
-
-results <- tmp
+write_rds(genes_to_domains, "results/genes_to_domains.rds")
 
 # --------------------------------------------------------------------------------------------
-# Finish categorisation of orthpairs localised in conserved, rearranged or outside domains
-# -------------------------------------------------------------------------------------------- 
+# Integrate genes with domains and domain categories
+# --------------------------------------------------------------------------------------------  
 
-results$category <- NA
-results$category <- ifelse(results$conserved, "Conserved", results$category)
-results$category <- ifelse(results$rearranged, "Rearranged", results$category)
-results$category <- ifelse(results$outside, "Outside", results$category)
-results$category <- factor(results$category, levels = c("Conserved", "Rearranged", "Outside"))
+tidy_domain_groups <- read_rds("results/tidy_domain_groups.rds")
 
-write_rds(results, "results/ortholog_expression_correlation.rds")
+genes_by_domain_categories <- tssDF %>% 
+  select(ensembl_gene_id, external_gene_name) %>% 
+  # add correlations
+  left_join(correlationDF, by = "ensembl_gene_id") %>% 
+  # add domains
+  left_join(genes_to_domains, by = "ensembl_gene_id") %>% 
+  # add domains categories
+  left_join(tidy_domain_groups, by = c("domain_type", "domain_id")) %>% 
+  # add gene category
+  mutate(
+    gene_category = ifelse(is.na(domain_id), "Outside", category)
+  )
+
+write_rds(genes_by_domain_categories, "results/genes_by_domain_categories.rds")
 
