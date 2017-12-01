@@ -363,7 +363,7 @@ data <- read_rds("results/breakpoints_at_boundaries.rds")
 
 # choose data for analysis
 test_data <- data %>% 
-  filter(boundaries %in% c("hESC", "GM12878"))
+  filter(domains %in% c("hESC", "GM12878"))
 
 # minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
 THRESHOLDS <- unlist(METADATA %>% 
@@ -398,59 +398,89 @@ OTHER_BINS <- seq(1, NBINS)[-TEST_BINS]
 
 # sum up breakpoints and random breakpoints for test and other bins
 fisher_input <- test_data %>%
-  group_by(domains, threshold, species) %>%
-  summarise(bp_test_sum = sum(hits[bin %in% TEST_BINS & sample == "real"]),
-            rdm_test_sum = sum(rdm_hits[bin %in% TEST_BINS & sample == "random"]),
-            bp_other_sum = sum(hits[bin %in% OTHER_BINS & sample == "real"]),
-            rdm_other_sum = sum(rdm_hits[bin %in% OTHER_BINS & sample == "random"]))
+  group_by(domains, threshold, species, sample) %>%
+  summarise(test_sum = sum(hits[bin %in% TEST_BINS]),
+            other_sum = sum(hits[bin %in% OTHER_BINS])
+            )
 
-fisher_results <- tibble()
-
-for (D in unique(test_data$boundaries)){
+# loop over groups, calculate fisher test
+domains_list <- map(unique(test_data$domains), function(D){
     
-  for (S in SPECIES$genome_assembly){
+  species_list <- map(SPECIES$genome_assembly, function(S){
   
-    for (THR in THRESHOLDS){    
+    thr_list <- map(THRESHOLDS, function(THR){   
       
-      # create matrix for fisher test function
-        fisher_matrix <- matrix(
-          unlist(
-            fisher_input %>%
-            filter(boundaries == D, species == S, threshold == THR) %>%
-            ungroup() %>%
-            select(bp_test_sum, rdm_test_sum, bp_other_sum, rdm_other_sum)
-          ),
-          nrow = 2
+      # filter 
+      this_fisher_input <- fisher_input %>%
+        filter(domains == D, species == S, threshold == THR) %>%
+        ungroup()
+      
+      # handle no breakpoints
+      if (this_fisher_input[1, 5] == 0){
+        return(tibble(domains = D, 
+                      species = S, 
+                      threshold = THR, 
+                      p_value = NA, 
+                      odds_ratio = NA))
+      }
+      
+      # create matrix for fisher test function: #1 col = real, #2 = random
+      fisher_matrix <- t(matrix(
+        unlist(
+          this_fisher_input %>%
+            arrange(desc(sample)) %>%
+            select(test_sum, other_sum)
+        ),
+        nrow = 2
         )
-      
+      )
+        
       # apply fisher test
       test_result <- fisher.test(fisher_matrix)
       
-      # get trivial name
-      trivial_name <- unlist(SPECIES %>%
-        filter(genome_assembly == S) %>%
-        select(trivial_name)
-      )
-      
       # gather results in data frame
-      tmp <- tibble(boundaries = factor(D), species = factor(trivial_name), threshold = factor(THR), 
-                    p_value = test_result$p.value, odds_ratio = test_result$estimate)
-    fisher_results <- rbind.data.framefisher_results, tmp)
-    }
-  }
-}
+      return(tibble(domains = D, 
+                    species = S, 
+                    threshold = THR, 
+                    p_value = test_result$p.value, 
+                    odds_ratio = test_result$estimate)
+      )
+    }) # end thr
+    
+    return(bind_rows(thr_list))
+
+  }) # end species
+  
+  return(bind_rows(species_list))
+
+}) # end domains
+
+fisher_results <- bind_rows(domains_list)
 
 # -------------------------------------------------------------------------------------------------------------------
 # Plot fisher odds ratios (log_2)
 # -------------------------------------------------------------------------------------------------------------------
 
-ggplot(fisher_results, aes(x = species, y = log2(odds_ratio), group=threshold))+ 
-  geom_bar(aes(fill=threshold),
-                  stat="identity", position="dodge", width=0.5) +
-  geom_text(aes(label=asterisks(p_value), y = ifelse(odds_ratio < 1, 0, log2(odds_ratio))), 
-                   position = position_dodge(width=0.5), vjust=0.8, hjust=-0.1, angle=90,
+# add trivial names
+fisher_results <- fisher_results %>%
+  left_join(SPECIES, by = c("species" = "genome_assembly"))
+
+ggplot(fisher_results, 
+       aes(x = trivial_name, 
+           y = log2(odds_ratio), 
+           group=factor(threshold), 
+           fill=factor(threshold))) + 
+  geom_bar(stat="identity", 
+           position="dodge", 
+           width=0.5) +
+  geom_text(aes(label=asterisks(p_value), 
+                y = ifelse(odds_ratio < 1, 0, log2(odds_ratio))), 
+                   position = position_dodge(width=0.5), 
+            vjust=0.8, 
+            hjust=-0.1, 
+            angle=90,
             inherit.aes = TRUE) +
-  facet_grid(boundaries ~ .) +
+  facet_grid(domains ~ .) +
 
 # cosmetics
   geom_hline(yintercept=0, linetype="solid", color="#666666", alpha=0.5) +
