@@ -1,13 +1,13 @@
-genome_assembly	trivial_name
-panTro5	chimpanzee
-gorGor5	gorilla
-ponAbe2	orangutan
-rheMac8	rhesus
-micMur2	mouse lemur
-mm10	mouse
-bosTau8	cattle
-triMan1	manatee
-monDom5	opossum
-galGal5	chicken
-xenTro7	clawed frog
-danRer10	zebrafish
+genome_assembly	trivial_name	species_name
+panTro5	chimpanzee	Pan troglodytes
+gorGor5	gorilla	Gorilla gorilla gorilla
+ponAbe2	orangutan	Pongo abelii
+rheMac8	rhesus	Macaca mulatta
+micMur2	mouse lemur	Microcebus murinus
+mm10	mouse	Mus musculus
+bosTau8	cattle	Bos taurus
+triMan1	manatee	Trichechus manatus latirostris
+monDom5	opossum	Monodelphis domestica
+galGal5	chicken	Gallus gallus
+xenTro7	clawed frog	Xenopus tropicalis
+danRer10	zebrafish	Danio rerio
