@@ -32,6 +32,9 @@ NCONTROLS <- unlist(METADATA %>%
                       dplyr::select(n_controls)
 )
 
+# read domain to GRB overlap assignent
+domain_to_GRB <- read_rds("results/domain_to_GRB.rds")
+
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints around structural domains
 # -------------------------------------------------------------------------------------------------------------------
@@ -40,29 +43,41 @@ all_domains <- DOMAINS %>%
     gr = map(domain_path, import.bed, seqinfo = hum_seqinfo),
     domain_subtype = "all"
   ) %>% 
-  select(- domain_path)
+  select(-domain_path, -domain_res)
 
 grb_domains <- all_domains %>% 
+  filter(domain_type != "GRB") %>% 
   mutate(
-    isGRB = map(gr, ~base::sample(c("GRB", "nonGRB", "screened"), length(.x), replace = TRUE)),
-    gr = map(gr, ~ .x[.x$isGRB == "GRB"]),
+    sub_idx = map(domain_type, ~pull(filter(domain_to_GRB, domain_type == .x, GRB_class == "GRB"), domain_id)),
+    gr = map2(gr, sub_idx, ~ .x[.y]),
     domain_subtype = "GRB"
-  )
-nongrb_domains <- all_domains %>% 
-  mutate(
-    isGRB = map(gr, ~base::sample(c("GRB", "nonGRB", "screened"), length(.x), replace = TRUE)),
-    gr = map(gr, ~ .x[.x$isGRB == "nonGRB"]),
-    domain_subtype = "nonGRB"
-  )
+  ) %>%
+  select(domain_type, domain_subtype, gr)
 
+nongrb_domains <- all_domains %>% 
+  filter(domain_type != "GRB") %>% 
+  mutate(
+    sub_idx = map(domain_type, ~pull(filter(domain_to_GRB, domain_type == .x, GRB_class == "nonGRB"), domain_id)),
+    gr = map2(gr, sub_idx, ~ .x[.y]),
+    domain_subtype = "nonGRB"
+  ) %>%
+  select(domain_type, domain_subtype, gr)
+
+screened_domains <- all_domains %>% 
+  filter(domain_type != "GRB") %>% 
+  mutate(
+    sub_idx = map(domain_type, ~pull(filter(domain_to_GRB, domain_type == .x, GRB_class == "screened"), domain_id)),
+    gr = map2(gr, sub_idx, ~ .x[.y]),
+    domain_subtype = "screened"
+  ) %>%
+  select(domain_type, domain_subtype, gr)
 
 domains_combined = bind_rows(
   all_domains,
   grb_domains,
-  nongrb_domains
-  ) %>% 
-  select(-isGRB)
-
+  nongrb_domains,
+  screened_domains
+  )
 
 domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   
@@ -74,7 +89,6 @@ domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   
   domain_type <- domains_df %>% pull(domain_type)
   domain_subtype <- domains_df %>% pull(domain_subtype)
-  print(str_c(domain_type, domain_subtype))
   
   # enlarge each domain by 50% of its width to each side
   domains_plus <- resize(domains, fix = "center", width= 2 * width(domains))
@@ -84,14 +98,18 @@ domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   
   species_result_list <- map(SPECIES$genome_assembly, function(S){
     
-    print(S)
-    
     thr_result_list <- map(THRESHOLDS, function(THR){
       
-      print(THR)
+      message(paste("INFO: process sample: ",  
+                    domain_type, domain_subtype, S, THR))
+      
       
       # load breakpoint and TAD bed files
-      breakpoints <- readBPFile(S, THR)
+      # breakpoints <- readBPFile(S, THR)
+      bp_file <- paste0("data/breakpoints/hg19.", S, ".", 
+                        as.character(format(THR, scientific = FALSE)), ".bp.bed")
+      
+      breakpoints <- import.bed(bp_file, seqinfo = hum_seqinfo)
       
       # handle case of no breakpoints for threshold
       if (length(breakpoints) < 1){
