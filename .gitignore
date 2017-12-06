@@ -3,6 +3,7 @@
 .RData
 .Ruserdata
 
+README.html
 # ignore data and folders
 .~lock.metadata.csv# &
 data
