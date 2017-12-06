@@ -28,6 +28,7 @@ data <- read_rds("results/breakpoints_at_domains.rds")
 
 # combine hits by sample replicates
 data_combined <- data %>% 
+  filter(domain_subtype == "all") %>%
   group_by(sample, replicate, species, threshold, domains) %>% 
   mutate(
     percent = hits / sum(hits) * 100
@@ -69,28 +70,50 @@ plot_data <- data_combined %>%
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
   mutate(sample_thr = str_c(sample, "_", threshold)) %>%
   mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
-  arrange(threshold, desc(sample))
-
-# choose colors (sample is atlernating)
-group_cols <- c(brewer.pal(3,"Blues"), brewer.pal(3,"Greys"))
-group_cols <- group_cols[c(1, 4, 2, 5, 3, 6)]
+  arrange(species, domains, threshold, desc(sample))
+  
+# choose colors (sample is alternating)
+group_cols <- c(brewer.pal(5,"Blues"), brewer.pal(5,"Greys"))
+group_cols <- group_cols[c(3, 7, 4, 8, 5, 10)]
 
 for (D in DOMAINS$domain_type){
   
   for (S in SPECIES$genome_assembly) {
     
-    this_plot_data <- filter(plot_data, species == S, domains == D)
+    this_plot_data <- 
+      filter(plot_data, species == S, domains == D)
     
     trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
 
     ggplot(this_plot_data, 
-           aes(x = bin, y = mean_percent, colour = sample_thr, fill = sample_thr)) +
-      geom_line() + 
+           aes(x = bin + 0.5, y = mean_percent, colour = sample_thr)) +
+      
+      geom_line(aes(linetype = sample)) + 
+      
+      # different linetypes for real and random breakpoints -> legend
+      scale_color_manual(values = group_cols, guide = FALSE) +
+      scale_linetype_manual(values=c("solid", "dashed"), 
+                            limits = c("real", "random"),
+                            labels = c("Breakpoints", "Background")) +
+      
+      # sd for background
       geom_ribbon(aes(ymin = mean_percent - se_percent,
-                      ymax = mean_percent + se_percent),
-                  color = NA, alpha = .1) +
-      scale_color_manual(values = group_cols) +
-      scale_fill_manual(values = group_cols) + 
+                      ymax = mean_percent + se_percent,
+                      group = sample_thr,
+                      alpha = threshold),
+                  fill = "gray",
+                  color = NA,
+                  show.legend = FALSE) +
+      scale_alpha(range = c(0.2, 0.6)) +
+      
+      # create invisible aes for threshold legend
+      geom_boxplot(aes(fill = factor(threshold)), color = NA) +
+      scale_fill_manual(values = group_cols[c(1,3,5)],
+                         limits = as.factor(c(10000, 100000, 1000000)),
+                         labels = c("10 kb", "100 kb", "1000 kb")) +
+      guides(fill = guide_legend(override.aes = list(fill = group_cols[c(1,3,5)]), order = 1)) +
+  
+      # scale_fill_manual(values = group_cols, guide = FALSE) + 
       scale_x_discrete(name="", 
                        limits=seq(1,NBINS + 1,NBINS/4), 
                        labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
@@ -98,7 +121,7 @@ for (D in DOMAINS$domain_type){
       ylab("Breakpoints [%]") +
       
       # from here all cosmetics like background, title, line colors...
-      theme_classic() +
+      theme_bw() +
       theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
             legend.title = element_blank(), legend.text = element_text(size = 11, face="bold"),
             legend.position = "bottom",
@@ -106,7 +129,10 @@ for (D in DOMAINS$domain_type){
             axis.title.y = element_text(face="bold", size=11),
             axis.text.x = element_text(face="bold", size=11), 
             axis.text.y = element_text(face="bold", size=11),
-            plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+            plot.margin=unit(c(0.1,0.5,0,0.5), "cm")
+            # panel.grid.major = element_blank(),
+            # panel.grid.minor = element_blank())
+      )
     
     ggsave(str_c(out_dir, trivial_name, "_", D, "_whole.pdf"), w=6, h=4)
     
@@ -149,20 +175,51 @@ plot_data <- data_combined %>%
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
   filter(species %in% SELECTED_SPECIES, threshold == THR, domains == D) %>%
   mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
-  mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels))
+  mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels),
+         linetype = ifelse(sample == "real", "solid", "dashed")) %>%
+  arrange(species, sample)
+
 
 # choose colors (sample is atlernating)
-group_cols <- c(brewer.pal(3,"Reds"), brewer.pal(3,"Blues"), brewer.pal(3,"Greens"), brewer.pal(3,"Purples"))
-group_cols <- group_cols[c(2, 3, 5, 6, 8, 9, 11, 12)]
+group_cols <- c(brewer.pal(4,"Reds"),
+                brewer.pal(4,"Blues"),
+                brewer.pal(4,"Greens"),
+                brewer.pal(4,"Purples"))
+group_cols <- group_cols[c(4, 4, 8, 8, 12, 12, 16, 16)]
 
 ggplot(plot_data, 
-       aes(x = bin, y = mean_percent, colour = species_sample_thr, fill = species_sample_thr)) +
-  geom_line() + 
-  # geom_ribbon(aes(ymin = mean_percent - se_percent,
-                 # ymax = mean_percent + se_percent),
-              # color = NA, alpha = .1) +
-  scale_color_manual(values = group_cols) +
-  scale_fill_manual(values = group_cols) +
+       aes(x = bin + 0.5, y = mean_percent, colour = species_sample_thr, fill = species_sample_thr)) +
+  
+  # different linetypes for real and random breakpoints -> legend
+  geom_line(aes(linetype = sample)) + 
+  scale_color_manual(values = group_cols, guide = FALSE) +
+  scale_linetype_manual(name = "",
+                        values=c("solid", "dashed"), 
+                        limits = c("real", "random"),
+                        labels = c("Breakpoints", "Background")) +
+  
+  # sd for background
+  geom_ribbon(aes(ymin = mean_percent - se_percent,
+                  ymax = mean_percent + se_percent,
+                  group = species_sample_thr,
+                  alpha = 0.01),
+              fill = "cornsilk3",
+              color = NA,
+              show.legend = FALSE) +
+
+  # create invisible aes for threshold legend
+  geom_boxplot(color = NA) +
+  scale_fill_manual(name = "",
+                    values = group_cols,
+                    limits = SELECTED_SPECIES,
+                    labels = SPECIES_NAMES) +
+  guides(fill = guide_legend(override.aes = list(
+      fill = group_cols[c(2, 4, 6, 8)]),
+      order = 1,
+      nrow=2,
+      byrow=TRUE),
+    linetype = guide_legend(nrow = 2, byrow = TRUE)) +
+
   scale_x_discrete(name="", 
                    limits=seq(1,NBINS + 1,NBINS/4), 
                    labels=c("-50%", "start", "TAD", "end", "+50%")) +  # adapt x axis
@@ -170,15 +227,19 @@ ggplot(plot_data,
   
   # from here all cosmetics like background, title, line colors...
   ylab("Breakpoints [%]") +
-  theme_classic() +
+  theme_bw() +
   theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
-        legend.title = element_text(size=11, face="bold"), legend.text = element_text(size = 11, face="bold"),
+        legend.title = element_text(size=11, face="bold"),
+        legend.text = element_text(size = 11, face="bold"),
         legend.position = "bottom",
         axis.title.x = element_text(face="bold", size=11),
         axis.title.y = element_text(face="bold", size=11),
         axis.text.x = element_text(face="bold", size=11), 
         axis.text.y = element_text(face="bold", size=11),
-        plot.margin=unit(c(0.1,0.5,0,0.5), "cm"))
+        plot.margin=unit(c(0.1,0.5,0,0.5), "cm")
+        # panel.grid.major = element_blank(),
+        # panel.grid.minor = element_blank())
+        )
 
 
 ggsave(str_c(out_dir, str_c(SPECIES_NAMES, collapse = "_"), "_whole.pdf"), w=6, h=4)
@@ -239,9 +300,9 @@ plot_data <- data_combined %>%
   mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
   arrange(threshold, desc(sample))
 
-# choose colors (sample is atlernating)
-group_cols <- c(brewer.pal(3,"Blues"), brewer.pal(3,"Greys"))
-group_cols <- group_cols[c(1, 4, 2, 5, 3, 6)]
+# choose colors (sample is alternating)
+group_cols <- c(brewer.pal(5,"Blues"), brewer.pal(5,"Greys"))
+group_cols <- group_cols[c(3, 8, 4, 9, 5, 10)]
 
 for (D in DOMAINS$domain_type){
   
@@ -361,9 +422,12 @@ ggsave(str_c(out_dir, str_c(SPECIES_NAMES, collapse = "_"), "_boundary.pdf"), w=
 
 data <- read_rds("results/breakpoints_at_boundaries.rds")
 
+# choose domains for plots
+plot_domains <- c("hESC", "GM12878")
+
 # choose data for analysis
 test_data <- data %>% 
-  filter(domains %in% c("hESC", "GM12878"))
+  filter(domains %in% plot_domains)
 
 # minimum size threasholds for chains (syntenic blocks) to be considered rearrangement blocks
 THRESHOLDS <- unlist(METADATA %>% 
@@ -463,7 +527,11 @@ fisher_results <- bind_rows(domains_list)
 
 # add trivial names
 fisher_results <- fisher_results %>%
-  left_join(SPECIES, by = c("species" = "genome_assembly"))
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>%
+  mutate(trivial_name = factor(trivial_name, 
+                               levels = SPECIES$trivial_name), 
+         domains = factor(domains, levels = plot_domains)
+         )
 
 ggplot(fisher_results, 
        aes(x = trivial_name, 
@@ -472,7 +540,8 @@ ggplot(fisher_results,
            fill=factor(threshold))) + 
   geom_bar(stat="identity", 
            position="dodge", 
-           width=0.5) +
+           width=0.5,
+           color = "black") +
   geom_text(aes(label=asterisks(p_value), 
                 y = ifelse(odds_ratio < 1, 0, log2(odds_ratio))), 
                    position = position_dodge(width=0.5), 
@@ -484,28 +553,30 @@ ggplot(fisher_results,
 
 # cosmetics
   geom_hline(yintercept=0, linetype="solid", color="#666666", alpha=0.5) +
-  scale_fill_brewer("Chain sizes >", palette = "Blues", labels = c("10 kb", "100 kb", "1000 kb")) +
-  xlab("") + ylab("log2(odds ratio)") + 
-  theme_minimal() +
+  scale_fill_brewer("", palette = "Blues", labels = c("10 kb", "100 kb", "1000 kb")) +
+  xlab("") + 
+  ylab("log2(odds ratio)") + 
+  ylim(c(-2, 2.5)) +
+  theme_bw() +
   theme(plot.title = element_text(size=14, face = "bold", colour = "black"),
-               strip.background = element_blank(),
+               # strip.background = element_blank(),
                strip.text.y = element_text(size = 10, face="bold"),
                legend.title = element_text(size=7, face="bold"), legend.text = element_text(size = 7, face="bold"),
-               legend.position = "none",
+               legend.position = "bottom",
                axis.title.x = element_text(face="bold", size=10),
                axis.title.y = element_text(face="bold", size=10),
-               axis.text.x = element_text(face="bold", size=10, angle=0, vjust=0.5), 
-               panel.grid.major = element_blank(),
+               axis.text.x = element_text(face="bold", size=10, angle=45, vjust=1, hjust = 1), 
+               # panel.grid.major = element_blank(),
                # panel.grid.minor = element_blank(),
                axis.text.y = element_text(face="bold", size=10))
 
-ggsave("results/breakpoint_enrichment_odds_ratios.pdf", w=12, h=4)
+ggsave("results/breakpoint_enrichment_odds_ratios.pdf", w=6, h=4)
 
 # =============================================================================================================================
 # Display distance distributions of breakpoints to domain boundaries and random breakpoints to domain boundaries
 # =============================================================================================================================
 
-data <- read_tsv("results/distances_to_boundaries.rds")
+data <- read_rds("results/distances_to_boundaries.rds")
 
 # choose data for analysis
 plot_data <- data %>% 
@@ -517,22 +588,24 @@ plot_data$species <- factor(
   levels = unlist(SPECIES$trivial_name))
 
 ggplot(plot_data, aes(x = type, y = distance)) + 
-  geom_boxplot(aes(color = type), outlier.size = 0.01, outlier.alpha = 0.3, width = 0.2) +
+  geom_boxplot(aes(color = type), 
+               outlier.shape = NA, 
+               width = 0.2) +
   facet_grid(boundaries ~ species) +
   geom_signif(comparisons=list(c("breakpoint", "random")), 
               map_signif_level = FALSE,
               test = wilcox.test,
               textsize = 3,
               tip_length = 0,
-              y_position = 0,
+              position = "identity",
               step_increase = 0.13,
               na.rm = TRUE) +
-  scale_y_log10(name = "Distance to boundary [bp]", limit=c(1,1e+8), 
+  scale_y_log10(name = "Distance to boundary [bp]", limit=c(1e+2,1e+8), 
                 breaks = scales::trans_breaks("log10", function(x) 10^x),
                 labels = scales::trans_format("log10", scales::math_format(10^.x))) +
   scale_color_discrete(name = "", labels=c("Breakpoints", "Control")) +
   xlab("") +
-  theme_minimal() +
+  theme_bw() +
   theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
         legend.text = element_text(size = 10, face = "bold"),
         legend.position = "bottom",
@@ -540,8 +613,9 @@ ggplot(plot_data, aes(x = type, y = distance)) +
         legend.direction = "horizontal",
         legend.key.width = unit(0.3, "cm"),
         legend.key.height = unit(0.3, "cm"),
-        strip.background = element_blank(),
+        # strip.background = element_blank(),
         strip.text = element_text(size = 10, face = "bold"),
+        # strip.text.x = element_text(angle = 90),
         axis.title.x = element_text(face="bold", size=10),
         axis.title.y = element_text(face="bold", size=10),
         axis.text.x = element_blank(),

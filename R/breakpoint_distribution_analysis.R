@@ -35,17 +35,46 @@ NCONTROLS <- unlist(METADATA %>%
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints around structural domains
 # -------------------------------------------------------------------------------------------------------------------
+all_domains <- DOMAINS %>% 
+  mutate(
+    gr = map(domain_path, import.bed, seqinfo = hum_seqinfo),
+    domain_subtype = "all"
+  ) %>% 
+  select(- domain_path)
 
-domain_result_list <- map(DOMAINS$domain_path, function(D){
-  
-  domains <- import(unlist(D), seqinfo = hum_seqinfo)
-  
-  # get domain type to store with every result
-  domain_type <- unlist(DOMAINS %>%
-                          filter(domain_path == D) %>%
-                          dplyr::select(domain_type)
+grb_domains <- all_domains %>% 
+  mutate(
+    isGRB = map(gr, ~base::sample(c("GRB", "nonGRB", "screened"), length(.x), replace = TRUE)),
+    gr = map(gr, ~ .x[.x$isGRB == "GRB"]),
+    domain_subtype = "GRB"
   )
+nongrb_domains <- all_domains %>% 
+  mutate(
+    isGRB = map(gr, ~base::sample(c("GRB", "nonGRB", "screened"), length(.x), replace = TRUE)),
+    gr = map(gr, ~ .x[.x$isGRB == "nonGRB"]),
+    domain_subtype = "nonGRB"
+  )
+
+
+domains_combined = bind_rows(
+  all_domains,
+  grb_domains,
+  nongrb_domains
+  ) %>% 
+  select(-isGRB)
+
+
+domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   
+  domains_df <- domains_combined[dm_set_idx, ]
+  
+  # extract columns from df
+  domains <- domains_df %>% pull(gr)
+  domains <- domains[[1]]
+  
+  domain_type <- domains_df %>% pull(domain_type)
+  domain_subtype <- domains_df %>% pull(domain_subtype)
+  print(str_c(domain_type, domain_subtype))
   
   # enlarge each domain by 50% of its width to each side
   domains_plus <- resize(domains, fix = "center", width= 2 * width(domains))
@@ -55,7 +84,11 @@ domain_result_list <- map(DOMAINS$domain_path, function(D){
   
   species_result_list <- map(SPECIES$genome_assembly, function(S){
     
+    print(S)
+    
     thr_result_list <- map(THRESHOLDS, function(THR){
+      
+      print(THR)
       
       # load breakpoint and TAD bed files
       breakpoints <- readBPFile(S, THR)
@@ -71,7 +104,8 @@ domain_result_list <- map(DOMAINS$domain_path, function(D){
           replicate = 1,
           species = S,
           threshold = THR,
-          domains = domain_type,
+          domain_type = domain_type,
+          domain_subtype = domain_subtype,
           n_breakpoints = length(breakpoints)
         )
         
@@ -93,7 +127,8 @@ domain_result_list <- map(DOMAINS$domain_path, function(D){
         replicate = 1,
         species = S,
         threshold = THR,
-        domains = domain_type,
+        domain_type = domain_type,
+        domain_subtype = domain_subtype,
         n_breakpoints = length(breakpoints)
       )
       
@@ -122,7 +157,8 @@ domain_result_list <- map(DOMAINS$domain_path, function(D){
           replicate = i,
           species = S,
           threshold = THR,
-          domains = domain_type,
+          domain_type = domain_type,
+          domain_subtype = domain_subtype,
           n_breakpoints = length(breakpoints)
         )
         return(results_loop)

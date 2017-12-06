@@ -1,4 +1,4 @@
-min_size_threshold	n_bins	n_controls	boundary_area
-10000	20	100	400000
-100000			
-1000000			
+min_size_threshold	n_controls	boundary_plus_adjacence	n_bins	boundary_area_start_bin	boundary_area_end_bin
+10000	100	400000	20	9	12
+100000					
+1000000					
