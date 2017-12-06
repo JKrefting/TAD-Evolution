@@ -19,7 +19,7 @@ hum_seqinfo <- seqinfo(genome)
 #' Harmston 2016 et al. which can be found here:
 #' https://github.com/ComputationalRegulatoryGenomicsICL/tad_cnes_harmston2017/blob/master/R/classify_dev_nondev.Rmd
 #' 
-tidy_scree_grb = function(tadGR, grbGR, top = 0.8, bottom = 0.2){
+tidy_screen_grb = function(tadGR, grbGR, top = 0.8, bottom = 0.2){
   
   # check that GRBs are non-overlapping, otherwise implementation does not work
   stopifnot(length(findOverlaps(grbGR, grbGR)) == length(grbGR))
@@ -75,7 +75,7 @@ domain_to_GRB <- DOMAINS %>%
   filter(domain_type != "GRB") %>% 
   mutate(
     tadGR = map(domain_path, import.bed, seqinfo = hum_seqinfo),
-    GRB_class = map(tadGR, tidy_scree_grb, grbGR, top = 0.8, bottom = 0.2),
+    GRB_class = map(tadGR, tidy_screen_grb, grbGR, top = 0.8, bottom = 0.2),
     domain_id = map(tadGR, ~1:length(.x))
   ) %>% 
   select(domain_id, domain_type, GRB_class) %>% 
@@ -83,4 +83,5 @@ domain_to_GRB <- DOMAINS %>%
 
 # write to output file
 write_rds(domain_to_GRB, "results/domain_to_GRB.rds")
+write_tsv(domain_to_GRB, "results/domain_to_GRB.tsv")
 
