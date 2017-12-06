@@ -5,15 +5,28 @@ Topologically associating domains (TADs) are genomic regions characterised by fr
 
 # Workflow
 
-First download and preprocess data:
-./bash/download.sh
-./bash/preprocess.sh
+## Download and preprocessing
+For downloading all external data execute the [bash/download.sh](bash/download.sh) bash script:
+```{bash}
+sh bash/download.sh
+```
+Than, rearragement breakpoints can be extracted from net-files for all species.
 
-The basic data can be evaluated in fills_and_breakpoints_plots.R.
+```{bash}
+sh bash/preprocess.sh
+```
 
-Then start analysis:
+## Fill number and size distribution
 
-Analyse breakpoint distributions at domains and domain boundaries in breakpoint_distribution_analysis.R, the results can be visualised in breakpoint_distribution_plots.R.
+The basic data can be evaluated in [fills_and_breakpoints_plots.R](fills_and_breakpoints_plots.R).
 
-Analyse the expression correlation of orthologs regarding conserved and rearranged domains by first classifying the domains in domain_classification.R. The correlation is conducted in
-ortholog_expression_analysis.R and the results visualised in ortholog_expression_plots.R.
+## Breakpoint distribution around TADs
+Analyse breakpoint distributions at domains and domain boundaries in [breakpoint_distribution_analysis.R](breakpoint_distribution_analysis.R), the results can be visualised in [breakpoint_distribution_plots.R](breakpoint_distribution_plots.R).
+
+## Classification of TADs
+ - [domain_classification.R](domain_classification.R)
+ - 
+ 
+## Ortholog Expression correlation
+ - [ortholog_expression_analysis.R](ortholog_expression_analysis.R)
+ - [ortholog_expression_plots.R](ortholog_expression_plots.R)
