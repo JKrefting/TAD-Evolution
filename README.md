@@ -18,15 +18,15 @@ sh bash/preprocess.sh
 
 ## Fill number and size distribution
 
-The basic data can be evaluated in [fills_and_breakpoints_plots.R](fills_and_breakpoints_plots.R).
+The basic data can be evaluated in [fills_and_breakpoints_plots.R](R/fills_and_breakpoints_plots.R).
 
 ## Breakpoint distribution around TADs
-Analyse breakpoint distributions at domains and domain boundaries in [breakpoint_distribution_analysis.R](breakpoint_distribution_analysis.R), the results can be visualised in [breakpoint_distribution_plots.R](breakpoint_distribution_plots.R).
+Analyse breakpoint distributions at domains and domain boundaries in [breakpoint_distribution_analysis.R](R/breakpoint_distribution_analysis.R), the results can be visualised in [breakpoint_distribution_plots.R](R/breakpoint_distribution_plots.R).
 
 ## Classification of TADs
- - [domain_classification.R](domain_classification.R)
- - 
+ - [domain_classification.R](R/domain_classification.R)
+ - [domain_to_GRBs.R](R/domain_to_GRBs.R)
  
 ## Ortholog Expression correlation
- - [ortholog_expression_analysis.R](ortholog_expression_analysis.R)
- - [ortholog_expression_plots.R](ortholog_expression_plots.R)
+ - [ortholog_expression_analysis.R](R/ortholog_expression_analysis.R)
+ - [ortholog_expression_plots.R](R/ortholog_expression_plots.R)
