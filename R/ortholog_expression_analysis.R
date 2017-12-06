@@ -27,9 +27,10 @@ REARR_BP_THR <- THRESHOLDS[3]
 genome <- BSgenome.Hsapiens.UCSC.hg19
 hum_seqinfo <- seqinfo(genome)
 # =============================================================================================================================
-# read domains with classification in conserved and rearraged
+# read domains with classification
 # =============================================================================================================================
-domain_classes <- read_rds("results/domain_classification.rds")
+tidy_domain_groups <- read_rds("results/tidy_domain_groups.rds")
+domain_to_GRB = read_rds("results/domain_to_GRB.rds")
 
 # =============================================================================================================================
 # Gene expression correlation of orthologs
@@ -192,8 +193,6 @@ write_rds(genes_to_domains, "results/genes_to_domains.rds")
 # Integrate genes with domains and domain categories
 # --------------------------------------------------------------------------------------------  
 
-tidy_domain_groups <- read_rds("results/tidy_domain_groups.rds")
-
 genes_by_domain_categories <- tssDF %>% 
   select(ensembl_gene_id, external_gene_name) %>% 
   # add correlations
@@ -202,6 +201,8 @@ genes_by_domain_categories <- tssDF %>%
   left_join(genes_to_domains, by = "ensembl_gene_id") %>% 
   # add domains categories
   left_join(tidy_domain_groups, by = c("domain_type", "domain_id")) %>% 
+  # add TAD sub-classification by GRB overlap
+  left_join(domain_to_GRB, by = c("domain_type", "domain_id")) %>% 
   # add gene category
   mutate(
     gene_category = ifelse(is.na(domain_id), "Outside", category)
