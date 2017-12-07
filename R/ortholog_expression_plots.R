@@ -14,6 +14,29 @@ TAD_GRB_CLASS_COLORS = brewer.pal(9, "Set1")[c(5, 4, 9)] # orange, purple, gray
 genes_by_domain_categories <- read_rds("results/genes_by_domain_categories.rds")
 
 #*******************************************************************************
+# Count genes with orthologs and expression data
+#*******************************************************************************
+geneCount <- genes_by_domain_categories %>% 
+  distinct(ensembl_gene_id, .keep_all = TRUE) %>% 
+  mutate(
+    hasExp = !is.na(correlation),
+    hasOrtholog = !is.na(mmusculus_homolog_ensembl_gene)
+    ) %>% 
+  count(hasExp, hasOrtholog) %>% 
+  write_tsv("results/genes_numbers_by_orthologs_and_exp_data.tsv")
+
+#*******************************************************************************
+# Count number of genes by combinations of groups 
+#*******************************************************************************
+countTADs <- genes_by_domain_categories %>% 
+  filter(
+    is.na(species) | species == "mm10",
+    domain_type %in% c("hESC"),
+  ) %>%
+  mutate(inTAD = !is.na(domain_id)) %>% 
+  count(inTAD, category, GRB_class)
+  
+#*******************************************************************************
 # Plot number of gnes in gene_category 
 #*******************************************************************************
 
