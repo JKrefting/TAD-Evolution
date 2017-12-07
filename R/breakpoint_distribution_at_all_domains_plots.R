@@ -29,12 +29,12 @@ data <- read_rds("results/breakpoints_at_domains.rds")
 # combine hits by sample replicates
 data_combined <- data %>% 
   filter(domain_subtype == "all") %>%
-  group_by(sample, replicate, species, threshold, domains) %>% 
+  group_by(sample, replicate, species, threshold, domain_type) %>% 
   mutate(
     percent = hits / sum(hits) * 100
   ) %>% 
   ungroup() %>% 
-  group_by(bin, sample, species, threshold, domains) %>% 
+  group_by(bin, sample, species, threshold, domain_type) %>% 
   summarise(
     n = n(),
     mean_hits = mean(hits),
@@ -70,7 +70,7 @@ plot_data <- data_combined %>%
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
   mutate(sample_thr = str_c(sample, "_", threshold)) %>%
   mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
-  arrange(species, domains, threshold, desc(sample))
+  arrange(species, domain_type, threshold, desc(sample))
   
 # choose colors (sample is alternating)
 group_cols <- c(brewer.pal(5,"Blues"), brewer.pal(5,"Greys"))
@@ -81,7 +81,7 @@ for (D in DOMAINS$domain_type){
   for (S in SPECIES$genome_assembly) {
     
     this_plot_data <- 
-      filter(plot_data, species == S, domains == D)
+      filter(plot_data, species == S, domain_type == D)
     
     trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
 
@@ -140,6 +140,86 @@ for (D in DOMAINS$domain_type){
 }
 
 # -------------------------------------------------------------------------------------------------------------------
+# Plot single species, all thresholds in facets for domains / species (supplementary figure)
+# -------------------------------------------------------------------------------------------------------------------
+
+# group sample and threshold together
+group_levels <- str_c(rep(c("real", "random"), 3), "_", rep(THRESHOLDS, each = 2))
+group_labels <- str_c(rep(c("Breakpoints", "Background"), 3), " ", rep(c("10 kb", "100 kb", "1000 kb"), each = 2))
+
+plot_data <- data_combined %>% 
+  left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
+  # combine sample and threshold to factor
+  mutate(sample_thr = str_c(sample, "_", threshold)) %>%
+  mutate(sample_thr = factor(sample_thr, levels = group_levels, labels = group_labels)) %>%
+  # determine order of domain_type / species displayed
+  mutate(domain_type = factor(domain_type, levels = pull(DOMAINS, domain_type))) %>%
+  mutate(species = factor(species, levels = pull(SPECIES, genome_assembly))) %>%
+  mutate(trivial_name = factor(trivial_name, levels = pull(SPECIES, trivial_name))) %>%
+  arrange(species, domain_type, threshold, desc(sample))
+
+# choose colors (sample is alternating)
+group_cols <- c(brewer.pal(5,"Blues"), brewer.pal(5,"Greys"))
+group_cols <- group_cols[c(3, 7, 4, 8, 5, 10)]
+
+
+ggplot(plot_data, 
+       aes(x = bin + 0.5, y = mean_percent, colour = sample_thr)) +
+  
+  geom_line(aes(linetype = sample)) + 
+  
+  # different linetypes for real and random breakpoints -> legend
+  scale_color_manual(values = group_cols, guide = FALSE) +
+  scale_linetype_manual(values=c("solid", "dashed"), 
+                        limits = c("real", "random"),
+                        labels = c("Breakpoints", "Background")) +
+  
+  # sd for background
+  geom_ribbon(aes(ymin = mean_percent - se_percent,
+                  ymax = mean_percent + se_percent,
+                  group = sample_thr,
+                  alpha = threshold),
+              fill = "gray",
+              color = NA,
+              show.legend = FALSE) +
+  scale_alpha(range = c(0.2, 0.6)) +
+  
+  # create invisible aes for threshold legend
+  geom_boxplot(aes(fill = factor(threshold)), color = NA) +
+  scale_fill_manual(values = group_cols[c(1,3,5)],
+                    limits = as.factor(c(10000, 100000, 1000000)),
+                    labels = c("10 kb", "100 kb", "1000 kb")) +
+  guides(fill = guide_legend(override.aes = list(fill = group_cols[c(1,3,5)]), order = 1)) +
+  
+  # scale_fill_manual(values = group_cols, guide = FALSE) + 
+  scale_x_discrete(name="", 
+                   limits=c(2.5,6,11,16,19.5), 
+                   labels=c("", "start", "TAD", "end", "")) +  # adapt x axis
+  geom_vline(xintercept = c(NBINS/4, (NBINS-(NBINS/4)))+1, linetype=3) + # TAD boundary lines
+  ylab("Breakpoints [%]") +
+  
+  # for all domains and species
+  facet_grid(trivial_name ~ domain_type, scale = "free_y") +
+  
+  # from here all cosmetics like background, title, line colors...
+  theme_bw() +
+  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
+        legend.title = element_blank(), legend.text = element_text(size = 11, face="bold"),
+        legend.position = "bottom",
+        axis.title.x = element_text(face="bold", size=11),
+        axis.title.y = element_text(face="bold", size=11),
+        axis.text.x = element_text(face="bold", size=10, hjust = c(0.5)), 
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(face="bold", size=11),
+        plot.margin=unit(c(1,0.5,0,1), "cm")
+        # panel.grid.major = element_blank(),
+        # panel.grid.minor = element_blank())
+  )
+
+ggsave(str_c(out_dir, "ALL_species_ALL_domains_whole.pdf"), w=6, h=12)
+
+
+# -------------------------------------------------------------------------------------------------------------------
 # Plot several species, single threshold
 # -------------------------------------------------------------------------------------------------------------------
 
@@ -150,9 +230,6 @@ SPECIES_NAMES <- map(unname(unlist(SPECIES %>%
                                      dplyr::select(trivial_name)
 )
 ), simpleCap)
-
-THR <- THRESHOLDS[1]
-D <- DOMAINS$domain_type[1]
 
 NSPECIES <- length(SELECTED_SPECIES)
 NSAMPLES <- length(unique(data_combined$sample))
@@ -173,7 +250,7 @@ group_labels <- str_c(rep(SPECIES_NAMES, each = NSAMPLES),
 
 plot_data <- data_combined %>% 
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
-  filter(species %in% SELECTED_SPECIES, threshold == THR, domains == D) %>%
+  filter(species %in% SELECTED_SPECIES, threshold == 10000, domain_type == "hESC") %>%
   mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
   mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels),
          linetype = ifelse(sample == "real", "solid", "dashed")) %>%

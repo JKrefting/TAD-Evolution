@@ -28,13 +28,13 @@ data <- read_rds("results/breakpoints_at_domains.rds")
 
 # combine hits by sample replicates
 data_combined <- data %>% 
-  filter(domain_subtype != "all") %>%
-  group_by(sample, replicate, species, threshold, domains) %>% 
+  filter(domain_subtype %in% c("GRB", "nonGRB")) %>%
+  group_by(sample, replicate, species, threshold, domain_type, domain_subtype) %>% 
   mutate(
     percent = hits / sum(hits) * 100
   ) %>% 
   ungroup() %>% 
-  group_by(bin, sample, species, threshold, domains) %>% 
+  group_by(bin, sample, species, threshold, domain_type, domain_subtype) %>% 
   summarise(
     n = n(),
     mean_hits = mean(hits),
@@ -70,17 +70,15 @@ plot_data <- data_combined %>%
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
   mutate(sample_and_subtype = str_c(sample, "_", domain_subtype)) %>%
   mutate(sample_and_subtype = factor(sample_and_subtype, levels = group_levels, labels = group_labels)) %>%
-  arrange(species, domains, threshold, desc(sample))
+  arrange(species, threshold, domain_type, sample_and_subtype)
   
 # choose colors 
-group_cols <- c(brewer.pal(10,"RdYlGn"))
-group_cols <- group_cols[c(1, 3, 8, 10)]
-#grid::grid.raster(my_palette, int=F)
-
-
+group_cols <- c(brewer.pal(10,"PuOr"))
+group_cols <- group_cols[c(2, 4, 9, 7)]
+grid::grid.raster(group_cols, int=F)
     
 this_plot_data <- 
-  filter(plot_data, species == "mm10", domains == "hESC", threshold == 10000)
+  filter(plot_data, species == "mm10", domain_type == "hESC", threshold == 10000)
 
 trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
 
@@ -98,19 +96,18 @@ ggplot(this_plot_data,
   # sd for background
   geom_ribbon(aes(ymin = mean_percent - se_percent,
                   ymax = mean_percent + se_percent,
-                  group = sample_thr,
-                  alpha = threshold),
+                  group = sample_and_subtype,
+                  alpha = 0.3),
               fill = "gray",
               color = NA,
               show.legend = FALSE) +
-  scale_alpha(range = c(0.2, 0.6)) +
   
-  # create invisible aes for threshold legend
-  geom_boxplot(aes(fill = factor(threshold)), color = NA) +
-  scale_fill_manual(values = group_cols[c(1,3,5)],
-                    limits = as.factor(c(10000, 100000, 1000000)),
-                    labels = c("10 kb", "100 kb", "1000 kb")) +
-  guides(fill = guide_legend(override.aes = list(fill = group_cols[c(1,3,5)]), order = 1)) +
+  # create invisible aes for subtype
+  geom_boxplot(aes(fill = domain_subtype), color = NA) +
+  scale_fill_manual(values = group_cols[c(1, 3)],
+                    limits = c("real_GRB", "real_nonGRB"),
+                    labels = c("GRB-TADs", "non-GRB-TADs")) +
+  guides(fill = guide_legend(override.aes = list(fill = group_cols[c(1,3)]), order = 1)) +
   
   # scale_fill_manual(values = group_cols, guide = FALSE) + 
   scale_x_discrete(name="", 
@@ -132,3 +129,5 @@ ggplot(this_plot_data,
         # panel.grid.major = element_blank(),
         # panel.grid.minor = element_blank())
   )
+
+ggsave(str_c(out_dir, trivial_name, "_", D ,"grb_subtypes_whole.pdf"), w=6, h=4)
