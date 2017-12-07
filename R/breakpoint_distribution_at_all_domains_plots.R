@@ -16,6 +16,8 @@ SPECIES <- read_tsv("species_meta.tsv")
 DOMAINS <- read_tsv("domains_meta.tsv")
 METADATA <- read_tsv("metadata.tsv")
 
+ACTUAL_RANDOM_COLORS = brewer.pal(9, "Set1")[c(2, 9)] # blue, gray
+
 # =============================================================================================================================
 # Plot breakpoint distributions at whole domain
 # =============================================================================================================================
@@ -657,50 +659,37 @@ data <- read_rds("results/distances_to_boundaries.rds")
 
 # choose data for analysis
 plot_data <- data %>% 
-  filter(boundaries %in% c("hESC", "GM12878"))
+  filter(boundaries %in% c("hESC", "GM12878")) %>% 
+  mutate(
+    species = factor(species, levels = SPECIES$genome_assembly, labels = SPECIES$trivial_name),
+    threshold = factor(threshold, levels = THRESHOLDS, labels = c("10 kb", "100 kb", "1000 kb")),
+    distance = distance / 1000
+  )
 
-# rename species
-plot_data$species <- factor(
-  SPECIES[match(plot_data$species, SPECIES$genome_assembly), ]$trivial_name,
-  levels = unlist(SPECIES$trivial_name))
 
-ggplot(plot_data, aes(x = type, y = distance)) + 
-  geom_boxplot(aes(color = type), 
-               outlier.shape = NA, 
-               width = 0.2) +
-  facet_grid(boundaries ~ species) +
-  geom_signif(comparisons=list(c("breakpoint", "random")), 
-              map_signif_level = FALSE,
-              test = wilcox.test,
-              textsize = 3,
-              tip_length = 0,
-              position = "identity",
-              step_increase = 0.13,
-              na.rm = TRUE) +
-  scale_y_log10(name = "Distance to boundary [bp]", limit=c(1e+2,1e+8), 
-                breaks = scales::trans_breaks("log10", function(x) 10^x),
-                labels = scales::trans_format("log10", scales::math_format(10^.x))) +
-  scale_color_discrete(name = "", labels=c("Breakpoints", "Control")) +
-  xlab("") +
+pValDF <- plot_data %>%
+  group_by(species, threshold, boundaries) %>% 
+  mutate(id = row_number()) %>% 
+  spread(type, distance) %>% 
+  summarize(
+    n = n(),
+    p = ifelse(
+      all(is.na(breakpoints)) | all(is.na(random)),
+      NA,
+      wilcox.test(breakpoint, random)$p.value
+    )
+  )
+
+p <- ggplot(plot_data, aes(x = species, y = distance, color = type)) + 
+  geom_boxplot(outlier.shape = NA) +
+  geom_text(aes(x = species, y = 2*10^4, label = paste0("p=", signif(p, 2))), 
+            data = pValDF, color = "black", size = 3) +
+  coord_flip() +
+  scale_y_log10(limits = c(1, 10^5)) + 
+  facet_grid(threshold ~ boundaries) +
+  scale_color_manual(values = ACTUAL_RANDOM_COLORS, name = "", labels = c("Breakpoints", "Background")) +
   theme_bw() +
-  theme(plot.title = element_text(size=12, face = "bold", colour = "black"),
-        legend.text = element_text(size = 10, face = "bold"),
-        legend.position = "bottom",
-        # legend.position = c(0.5, -0.03),
-        legend.direction = "horizontal",
-        legend.key.width = unit(0.3, "cm"),
-        legend.key.height = unit(0.3, "cm"),
-        # strip.background = element_blank(),
-        strip.text = element_text(size = 10, face = "bold"),
-        # strip.text.x = element_text(angle = 90),
-        axis.title.x = element_text(face="bold", size=10),
-        axis.title.y = element_text(face="bold", size=10),
-        axis.text.x = element_blank(),
-        axis.text.y = element_text(face="bold", size=10),
-        axis.ticks.x = element_blank(),
-        panel.grid.major = element_blank(),
-        # panel.grid.minor = element_blank(),
-        plot.margin=unit(c(0.1,0.5,0,0.5), "cm")
-        )
+  theme(legend.position = "bottom") +
+  labs(y = "Distance to TAD boundary [kb]", x = "")
 
-ggsave("results/distances_to_boundaries.pdf", w=12, h=4)
+ggsave("results/distances_to_boundaries.pdf", w = 6, h = 8)
