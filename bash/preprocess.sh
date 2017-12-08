@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ================================================================================================
-# Get the coordinates of syntenic alignment blocks (from chains) and rearrangement breakpoints (from whole-genome alignments) and them in BED format using python scripts.
+# Get the coordinates of rearrangement breakpoints (from whole-genome alignments) and save in BED format using python scripts.
 # ================================================================================================
 
 set -o errexit # stop script on first error
