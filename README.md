@@ -1,7 +1,13 @@
 # TAD-Evolution
 
-Genome organisation is crucial for a variety of genomic functions.
-Topologically associating domains (TADs) are genomic regions characterised by frequent intra-regional contacts. These contacts are essential for gene regulation and the disruption of TADs should thus be negatively selected during evolution. In this project, we compare human TADs to rearrangements in whole-genome alignments of different vertebrate species to find out whether TADs can be considered conserved building blocks of genomes. Furthermore, gene expression analysis is conducted to investigate expression patterns of orthologs with regard to TAD rearrangements. Together, this tests the hypothesis that TADs constitute the structural basis for gene regulation whose conservation can be explained by maintaining important regulatory environments.   
+### Background 
+The human genome is highly organized in the three-dimensional nucleus. Chromosomes fold locally into topologically associating domains (TADs) defined by increased intra-domain chromatin contacts. TADs contribute to gene regulation by restricting chromatin interactions of regulatory sequences, such as enhancers, with their target genes. Disruption of TADs can result in altered gene expression and is associated to genetic diseases and cancers. However, it is not clear to which extent TAD regions are conserved in evolution and whether disruption of TADs by evolutionary rearrangements can alter gene expression.
+
+### Results
+Here, we hypothesize, that TADs represent essential functional units of genomes, which are selected against rearrangements during evolution. We investigate this using whole-genome alignments to identify evolutionary rearrangement breakpoints of different vertebrate species. Rearrangement breakpoints are strongly enriched at TAD boundaries and depleted within TADs across species. Furthermore, using gene expression data across many tissues in mouse and human, we show that genes within TADs have more conserved expression patterns. Disruption of TADs by evolutionary rearrangements is associated with changes in gene expression profiles, consistent with a functional role of TADs in gene expression regulation.
+
+### Conclusions
+Together, these results indicate that TADs are conserved building blocks of genomes with regulatory functions that are rather often reshuffled as a whole instead of being disrupted by rearrangements. 
 
 # Workflow
 
@@ -10,7 +16,7 @@ For downloading all external data execute the [bash/download.sh](bash/download.s
 ```{bash}
 sh bash/download.sh
 ```
-Than, rearragement breakpoints can be extracted from net-files for all species.
+Than, rearrangement breakpoints can be extracted from net-files for all species.
 
 ```{bash}
 sh bash/preprocess.sh
