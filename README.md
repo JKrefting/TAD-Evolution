@@ -18,28 +18,11 @@ The analysis is mainly implemented in R by using several additional packages:
  - R version 3.3.3 (2017-03-06)
  - R packages:
 	- BSgenome.Hsapiens.UCSC.hg19_1.4.0 
-	- stringr_1.2.0
+	- rtracklayer_1.34.2
+	- biomaRt_2.30.0
 	- ggsignif_0.4.0
 	- RColorBrewer_1.1-2
-	- dplyr_0.7.4 
-	- purrr_0.2.4
-	- readr_1.1.1
-	- tidyr_0.7.2
-	- tibble_1.3.4 
-	- ggplot2_2.2.1 
 	- tidyverse_1.1.1 
-	- BSgenome_1.42.0 
-	- rtracklayer_1.34.2
-	- Biostrings_2.42.1
-	- XVector_0.14.1
-	- biomaRt_2.30.0
-	- GenomicRanges_1.26.4
-	- GenomeInfoDb_1.10.3 
-	- IRanges_2.8.2
-	- S4Vectors_0.12.2
-	- BiocGenerics_0.20.0
-
-
  - Python 2.7 
 
 # Workflow
