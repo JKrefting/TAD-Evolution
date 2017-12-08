@@ -62,8 +62,9 @@ mouse_design <- str_c(mouse_exp_prefix, metadata_suffix) %>%
 # get mapping from human tissue name to UBERON term ID
 human_design_sub <- human_design %>%
   select(name = `Sample Characteristic[organism part]`, 
+         run_human = Run,
          term_url = `Sample Characteristic Ontology Term[organism part]`) %>% 
-  distinct()
+  distinct(name, term_url, .keep_all = TRUE)
 
 
 # get metadat of each condition from column name and design table
@@ -77,9 +78,10 @@ human_meta <- tibble(
 
 # get mapping from mouse tissue name to UBERON term ID
 mouse_design_sub <- mouse_design %>%
-  select(name_mouse = `Sample Characteristic[organism part]`, 
+  select(name_mouse = `Sample Characteristic[organism part]`,
+         run_mouse = Run,
          term_url = `Sample Characteristic Ontology Term[organism part]`) %>% 
-  distinct()
+  distinct(name_mouse, term_url, .keep_all = TRUE)
 
 # get metadat of each condition from column name and design table
 mouse_meta <- tibble(
@@ -115,6 +117,10 @@ mouse_exp_match <- mouse_exp %>%
 #-------------------------------------------------------------------------------
 
 write_tsv(cond_match, str_c(output_prefix, ".condition_matching.mouse_human.tsv"))
+
+cond_match_sub = cond_match %>%
+  select(human_col_name, human_tissue, run_human, term_url, dev_stage = human_dev_stage, mouse_col_name, mouse_tissue, run_mouse)
+write_tsv(cond_match_sub, str_c(output_prefix, ".condition_matching.mouse_human.selected_columns.tsv"))
 
 write_tsv(human_exp_match, str_c(output_prefix, ".human_exp.matching_subset.tsv"))
 write_tsv(mouse_exp_match, str_c(output_prefix, ".mouse_exp.matching_subset.tsv"))
