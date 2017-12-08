@@ -2,7 +2,7 @@
 
 This repository contains the source code for all analysis in the study:
 
-Krefting J, Andrade-Navarro MA, Ibn-Salem J. Evolutionary stability of topologically associating domains is associated with conserved gene regulation. 
+Krefting J, Andrade-Navarro MA, Ibn-Salem J. (2017) *Evolutionary stability of topologically associating domains is associated with conserved gene regulation.* 
 
 The following documentation guides through all steps including downloading of external source data, retrieving ortholog genes from ENSEMBL, filtering, annotation, and running all analysis.
 
@@ -43,29 +43,44 @@ The analysis is mainly implemented in R by using several additional packages:
  - Python 2.7 
 
 # Workflow
+The scripts have to be executed in the order as listed bellow.
 
 ## Download and preprocessing
 For downloading all external data execute the [bash/download.sh](bash/download.sh) bash script:
 ```{bash}
 sh bash/download.sh
 ```
-Than, rearrangement breakpoints can be extracted from net-files for all species.
+Then, rearrangement breakpoints can be extracted from net-files for all species:
 
 ```{bash}
 sh bash/preprocess.sh
 ```
 
 ## Fill number and size distribution
+Syntenic regions and breakpoitns are analysed in:
 
-The basic data can be evaluated in [fills_and_breakpoints_plots.R](R/fills_and_breakpoints_plots.R).
+ - [fills_and_breakpoints_plots.R](R/fills_and_breakpoints_plots.R).
 
 ## Breakpoint distribution around TADs
-Analyse breakpoint distributions at domains and domain boundaries in [breakpoint_distribution_analysis.R](R/breakpoint_distribution_analysis.R), the results can be visualised in [breakpoint_distribution_plots.R](R/breakpoint_distribution_plots.R).
+Analysis of breakpoint distributions at domains and domain boundaries and visualisation of results:
+
+ - [breakpoint_distribution_analysis.R](R/breakpoint_distribution_analysis.R)
+ - [breakpoint_distribution_at_all_domains_plots.R](R/breakpoint_distribution_at_all_domains_plots.R)
+ - [breakpoint_distribution_at_grb_nongrb_domains_plots.R](R/breakpoint_distribution_at_grb_nongrb_domains_plots.R)
+
 
 ## Classification of TADs
+TADs are classified into conserved or rearranged TADs, as well as, GRB-TADs and non-GRB-TADs:
+
  - [domain_classification.R](R/domain_classification.R)
  - [domain_to_GRBs.R](R/domain_to_GRBs.R)
+ - [domain_classification_plots.R](R/domain_classification_plots.R)
  
 ## Ortholog Expression correlation
+Ortholog expression correlation across matching tissues in human and mouse:
+
+ - [ortholog_expression_data.R](R/ortholog_expression_data.R)
  - [ortholog_expression_analysis.R](R/ortholog_expression_analysis.R)
  - [ortholog_expression_plots.R](R/ortholog_expression_plots.R)
+
+
