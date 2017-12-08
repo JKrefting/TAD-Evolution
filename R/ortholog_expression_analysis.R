@@ -209,16 +209,3 @@ genes_by_domain_categories <- tssDF %>%
   )
 
 write_rds(genes_by_domain_categories, "results/genes_by_domain_categories.rds")
-
-# =============================================================================================================================
-# Supplementary table S2
-# ============================================================================================================================= 
-
-genes_by_domain_categories <- read_rds("results/genes_by_domain_categories.rds")
-genes_by_domain_categories_flt <- genes_by_domain_categories %>%
-  filter(species == "mm10",
-         domain_type == "hESC",
-         !is.na(mmusculus_homolog_ensembl_gene)
-  )
-
-write_tsv(genes_by_domain_categories_flt, "results/supplementary_table_S2.tsv")

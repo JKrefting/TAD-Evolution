@@ -13,29 +13,66 @@ TAD_GRB_CLASS_COLORS = brewer.pal(9, "Set1")[c(5, 4, 9)] # orange, purple, gray
 #*******************************************************************************
 genes_by_domain_categories <- read_rds("results/genes_by_domain_categories.rds")
 
+#===============================================================================
+# Supplementary table S2
+#=============================================================================== 
+
+genes_mm10_hESC <- genes_by_domain_categories %>%
+  filter(species == "mm10" | is.na(species),
+         domain_type == "hESC",
+         !is.na(mmusculus_homolog_ensembl_gene)
+  ) %>% 
+  select(-rearranged_by_breakpoint,
+         -enclosed_by_chain,
+         -rearranged_by_breakpoint_conserved_th,
+         -rearranged_by_breakpoint_rearranged_th,
+         -conserved,
+         -rearranged,
+         -domain_type,
+         -species,
+         -category) %>% 
+  rename(expression_correlation = correlation)
+
+write_tsv(genes_mm10_hESC, "results/supplementary_table_S2.tsv")
+
+
 #*******************************************************************************
 # Count genes with orthologs and expression data
 #*******************************************************************************
 geneCount <- genes_by_domain_categories %>% 
-  distinct(ensembl_gene_id, .keep_all = TRUE) %>% 
-  mutate(
+  filter(species == "mm10" | is.na(species),
+         domain_type == "hESC") %>% 
+    mutate(
     hasExp = !is.na(correlation),
     hasOrtholog = !is.na(mmusculus_homolog_ensembl_gene)
     ) %>% 
   count(hasExp, hasOrtholog) %>% 
   write_tsv("results/genes_numbers_by_orthologs_and_exp_data.tsv")
 
+
 #*******************************************************************************
 # Count number of genes by combinations of groups 
 #*******************************************************************************
-countTADs <- genes_by_domain_categories %>% 
+count_gene_categories <- genes_by_domain_categories %>% 
   filter(
     is.na(species) | species == "mm10",
     domain_type %in% c("hESC"),
-  ) %>%
+    !is.na(mmusculus_homolog_ensembl_gene),
+    !is.na(correlation)) %>%
   mutate(inTAD = !is.na(domain_id)) %>% 
-  count(inTAD, category, GRB_class)
-  
+  count(inTAD, gene_category) %>% 
+  write_tsv("results/genes_numbers_by_orthologs_and_exp_data.gene_category.tsv")
+
+count_GRB_class <- genes_by_domain_categories %>% 
+  filter(
+    is.na(species) | species == "mm10",
+    domain_type %in% c("hESC"),
+    !is.na(mmusculus_homolog_ensembl_gene),
+    !is.na(correlation)) %>%
+  mutate(inTAD = !is.na(domain_id)) %>% 
+  count(inTAD, GRB_class) %>% 
+  write_tsv("results/genes_numbers_by_orthologs_and_exp_data.GRB_class.tsv")
+
 #*******************************************************************************
 # Plot number of gnes in gene_category 
 #*******************************************************************************
