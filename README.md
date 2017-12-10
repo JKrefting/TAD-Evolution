@@ -2,7 +2,8 @@
 
 This repository contains the source code for all analysis in the study:
 
-Krefting J, Andrade-Navarro MA, Ibn-Salem J. (2017) *Evolutionary stability of topologically associating domains is associated with conserved gene regulation.* 
+Krefting J, Andrade-Navarro MA, Ibn-Salem J. (2017) **Evolutionary stability of topologically associating domains is associated with conserved gene regulation.** 
+bioRxiv 231431; doi: https://doi.org/10.1101/231431 
 
 The following documentation guides through all steps including downloading of external source data, retrieving ortholog genes from ENSEMBL, filtering, annotation, and running all analysis.
 
