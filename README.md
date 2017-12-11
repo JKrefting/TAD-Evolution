@@ -57,7 +57,7 @@ Analysis of breakpoint distributions at domains and domain boundaries and visual
 TADs are classified into conserved or rearranged TADs, as well as, GRB-TADs and non-GRB-TADs:
 
  - [domain_classification.R](R/domain_classification.R)
- - [domain_to_GRBs.R](R/domain_to_GRBs.R)
+ - [domains_to_GRBs.R](R/domains_to_GRBs.R)
  - [domain_classification_plots.R](R/domain_classification_plots.R)
  
 ## Ortholog Expression correlation
