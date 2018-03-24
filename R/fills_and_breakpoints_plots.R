@@ -3,11 +3,13 @@
 # Plots of data after preprocessing: fills and breakpoints extracted from whole-genome alignemnts (net files)
 # =============================================================================================================================
 
+require(BSgenome.Hsapiens.UCSC.hg19)
+source("R/functions.R")
+
 require(tidyverse)
 require(ggplot2)
 require(RColorBrewer)
 
-source("R/functions.R")
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -19,47 +21,55 @@ THRESHOLDS <- unlist(METADATA %>%
                        dplyr::select(min_size_threshold)
 )
 
+# define colors for species
+COL_SPECIES = brewer.pal(12, "Set3")
+
+# Load human seqinfo
+genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(genome)
 
 # -------------------------------------------------------------
 # Fills
 # -------------------------------------------------------------
 
 # prepare data for plotting
-data_df <- tibble()
 # gather all date in one tibble
-for (S in SPECIES$genome_assembly) {
-  
-  fills <- readFillFile(S)
-  
-  trivial_name <- unlist(SPECIES %>%
-                           filter(genome_assembly == S) %>%
-                           dplyr::select(trivial_name)
-                         )
-  
-  single_df <- tibble(size = width(fills), 
-                      species = factor(trivial_name), 
-                      type = mcols(fills)$name)
-  
-  data_df <- rbind(data_df, single_df)
-}
 
-# rename fill types
-data_df[data_df$type == "top", ]$type <- "top-level"
-data_df[data_df$type == "nonSyn", ]$type <- "non-syntenic"
-data_df[data_df$type == "syn", ]$type <- "syn / inv"
-data_df[data_df$type == "inv", ]$type <- "syn / inv"
+data_df <- SPECIES %>% 
+  select(genome_assembly, species = trivial_name) %>% 
+  mutate(
+    fills = map(genome_assembly, readFillFile, seqinfo = hum_seqinfo),
+    size = map(fills, width),
+    type = map(fills, function(gr) mcols(gr)$name)
+    ) %>% 
+  select(-fills, -genome_assembly) %>% 
+  unnest(size, type) %>% 
+  # order species as factor and rename types
+  mutate(
+    species = factor(species, levels = SPECIES$trivial_name),
+    type = case_when(
+      type == "top" ~ "top-level",
+      type == "nonSyn" ~ "non-syntenic",
+      type == "syn" ~ "syn / inv",
+      type == "inv" ~ "syn / inv"
+    )
+  )
 
 # store data
 write_rds(data_df, "results/fill_data.rds")
 write_tsv(data_df, "results/fill_data.tsv")
+# data_df2 <- read_rds("results/fill_data.rds")
 
 # -------------------------------------------------------------
 # Plot number of fills per species / type
 # -------------------------------------------------------------
 
 # ignore syn / inv fills
-data_df <- filter(data_df, type != "syn / inv")
-data_df$type <- ordered(factor(data_df$type, levels = c("top-level", "non-syntenic")))
+data_df <- data_df %>% 
+  filter(type %in% c("top-level", "non-syntenic")) %>% 
+  mutate(
+    type = factor(type, levels = c("top-level", "non-syntenic"))
+  )
 
 plot_df <- data_df %>%
   group_by(species, type) %>%
@@ -95,6 +105,38 @@ ggplot(plot_df, aes(x = species, y = n,fill = species)) +
 
 ggsave("results/fill_numbers.pdf", w=6, h=4)
 
+
+# Horizontal plot
+
+plotDF <- plot_df %>%
+  ungroup() %>% 
+  mutate(
+    species = factor(species, levels = rev(levels(species)))
+  )
+
+ggplot(plotDF, aes(x = species, y = n, fill = species)) + 
+  geom_bar(stat = "identity", color = "black") +
+  coord_flip() +
+  geom_text(aes(label = n), hjust = "inward") +
+  facet_grid(. ~ type) +
+  scale_y_continuous(name = "Number of fills",
+                     limits = c(0, 150000),
+                     breaks = c(0, 25000, 50000, 75000, 100000, 125000, 150000),
+                     labels = c("0", "25000", "", "75000", "", "125000", "")) +
+  theme_bw() + 
+  scale_fill_manual(values = rev(COL_SPECIES)) +
+  # scale_fill_brewer("", palette = "Set3") +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_blank()
+  ) +
+  labs(x = "", y = "")
+
+ggsave("results/fill_numbers_horiz.pdf", w=3, h=6)
+
+
+
 # -------------------------------------------------------------
 # Depict distributions of fill sizes
 # -------------------------------------------------------------
@@ -126,6 +168,34 @@ ggplot(plot_df) +
 
 ggsave("results/fill_size_distributions.pdf", w=6, h=4)
 
+# Horizontal plot of fill sizes
+
+plotDF <- data_df %>% 
+  filter(type != "syn / inv") %>% 
+  ungroup() %>% 
+  mutate(
+    species = factor(species, levels = rev(levels(species)))
+  )
+
+ggplot(plotDF) + 
+  geom_violin(aes(y = size, x = species, fill = species), adjust = 0.5) +
+  stat_summary(aes(x = species, y = size), fun.y="median", geom="point", size=2, color="black") +
+  scale_y_log10(name = "Fill sizes [bp]", breaks = scales::trans_breaks("log10", function(x) 10^x),
+                limit=c(100,1e+9), labels = scales::trans_format("log10", scales::math_format(10^.x))) +
+  coord_flip() +
+  facet_grid(. ~ type) +
+  theme_bw() + 
+  scale_fill_manual(values = rev(COL_SPECIES)) +
+  theme(
+    legend.position = "none",
+    # axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_blank()
+  ) +
+  labs(x = "", y = "")
+                    
+
+ggsave("results/fill_size_distributions_horiz.pdf", w=3, h=6)
+
 # -------------------------------------------------------------
 # Breakpoints
 # -------------------------------------------------------------
@@ -155,6 +225,7 @@ for (S in SPECIES$genome_assembly) {
 # store data
 write_rds(data_df, "results/breakpoint_data.rds")
 write_tsv(data_df, "results/breakpoint_data.tsv")
+# data_df2 <- read_rds("results/breakpoint_data.rds")
 
 # prepare data for plotting
 plot_df <- data_df %>%
@@ -194,3 +265,34 @@ ggplot(plot_df, aes(x = threshold, y = n)) +
   )
 
 ggsave("results/breakpoint_numbers.pdf", w=6, h=4)
+
+# horizontal plot --------------------------------------------------------------
+breakpoint_count <- SPECIES %>% 
+  select(species = trivial_name) %>% 
+  tidyr::expand(species, threshold = THRESHOLDS) %>% 
+  left_join(select(SPECIES, trivial_name, genome_assembly), by = c("species" = "trivial_name")) %>% 
+  mutate(
+    breakpoints = map2(genome_assembly, threshold, readBPFile),
+    n = map_int(breakpoints, length),
+    species = factor(species, levels = SPECIES$trivial_name),
+    threshold = factor(threshold/1000, levels = rev(c("10", "100", "1000")))
+  ) %>% 
+  select(-breakpoints, -genome_assembly) 
+
+
+# plot number of breakpoints for species
+ggplot(breakpoint_count, aes(x = threshold, y = n, fill = species)) + 
+  geom_bar(stat = "identity", color = "black") + 
+  geom_text(aes(label = n), hjust = "inward") +
+  coord_flip() +
+  facet_grid(species ~ .) +
+  ylab("Number of breakpoints") +
+  xlab("Size threshold [kb]") +
+  scale_fill_manual(values = COL_SPECIES) +
+  theme_bw() + 
+  theme(strip.background = element_blank(),
+        strip.text.y = element_blank(),
+        legend.position = "none",
+  )
+
+ggsave("results/breakpoint_numbers_horiz.pdf", w=3, h=6)
