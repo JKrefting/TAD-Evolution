@@ -63,7 +63,7 @@ for (D in DOMAINS$domain_path) {
     
     print(S)
     
-    chains <- readFillFile(S) 
+    chains <- readFillFile(S, seqinfo = hum_seqinfo) 
     
     # check if domains inside chains
     enclosed_by_chain <- overlapsAny(domains, chains, type = "within")

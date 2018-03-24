@@ -1,7 +1,9 @@
+require(rtracklayer)
+
 # Read in fill BED file
-readFillFile <- function(species){
+readFillFile <- function(species, seqinfo){
  fi_file <- paste0("data/fills/hg19.", species, ".fill.bed")
-  return(import(fi_file, seqinfo = hum_seqinfo))
+  return(import(fi_file, seqinfo = seqinfo))
 }
 
 # Read in breakpoint BED file
