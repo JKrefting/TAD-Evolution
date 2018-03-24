@@ -68,7 +68,7 @@ orth_attr = c("ensembl_gene_id",  "mmusculus_homolog_ensembl_gene",
 # Query orthologs by human gene ID
 orthologsDF = getBM(attributes = orth_attr, mart = ensembl) 
 
-# filter all human genes to have an "one2one" ortholog in mouse with confidance  = 1
+# filter all human genes to have an "one2one" ortholog in mouse
 orthologs <- as.tibble(orthologsDF) %>% 
   filter(
     mmusculus_homolog_ensembl_gene != "",
@@ -80,6 +80,18 @@ orthologs_with_exp <- orthologs %>%
   filter(ensembl_gene_id %in% human_exp_match$`Gene ID`) %>% 
   filter(mmusculus_homolog_ensembl_gene %in% mouse_exp_match$`Gene ID`) %>% 
   select(-mmusculus_homolog_orthology_type, -mmusculus_homolog_orthology_confidence)
+
+
+# get fraction of one2many ortholog pairs
+ortholog_type_count <- as.tibble(orthologsDF) %>% 
+  filter(
+    mmusculus_homolog_ensembl_gene != "",
+    ensembl_gene_id %in% human_exp_match$`Gene ID`,
+    mmusculus_homolog_ensembl_gene %in% mouse_exp_match$`Gene ID`
+  ) %>% 
+  count(mmusculus_homolog_orthology_type) %>% 
+  mutate(percent = n / sum(n) * 100) %>% 
+  write_tsv("results/ortholog_type_count.tsv")
 
 # --------------------------------------------------------------------------------------------
 # Prepare data for correlation
