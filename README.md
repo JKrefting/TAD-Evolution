@@ -27,10 +27,10 @@ The analysis is mainly implemented in R by using several additional packages:
  - Python 2.7 
 
 # Workflow
-The scripts have to be executed in the order as listed bellow.
+The scripts have to be executed in the order as listed below.
 
 ## Download and preprocessing
-For downloading all external data execute the [bash/download.sh](bash/download.sh) bash script:
+For downloading all external data, execute the [bash/download.sh](bash/download.sh) bash script:
 ```{bash}
 sh bash/download.sh
 ```
@@ -45,6 +45,11 @@ Syntenic regions and breakpoitns are analysed in:
 
  - [fills_and_breakpoints_plots.R](R/fills_and_breakpoints_plots.R).
 
+## Associate TADs to GRBs
+by grouping TADs in GRB-TADs, and Non-GRB-TADs:
+
+ - [domains_to_GRBs.R](R/domains_to_GRBs.R)
+
 ## Breakpoint distribution around TADs
 Analysis of breakpoint distributions at domains and domain boundaries and visualisation of results:
 
@@ -57,7 +62,6 @@ Analysis of breakpoint distributions at domains and domain boundaries and visual
 TADs are classified into conserved or rearranged TADs, as well as, GRB-TADs and non-GRB-TADs:
 
  - [domain_classification.R](R/domain_classification.R)
- - [domains_to_GRBs.R](R/domains_to_GRBs.R)
  - [domain_classification_plots.R](R/domain_classification_plots.R)
  
 ## Ortholog Expression correlation
