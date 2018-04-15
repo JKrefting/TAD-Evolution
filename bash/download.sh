@@ -66,6 +66,7 @@ cut -f1-3 'data/TADs/'41467_2017_524_MOESM2_ESM.txt | tail -n +2 > 'data/TADs/'4
 mkdir -p 'data/alignments/'
 
 # init variables
+# DLPATH='http://hgdownload.soe.ucsc.edu/goldenPath/hg19/'
 DLPATH='http://hgdownload.soe.ucsc.edu/goldenPath/hg38/'
 SPECIES="$(cut -f1 species_meta.tsv | tail -n +2)"
 
@@ -75,6 +76,7 @@ for S in ${SPECIES[@]}; do
 	UPPER_S="$(tr '[:lower:]' '[:upper:]' <<< ${S:0:1})${S:1}" # uppercase species
 
 	# alignment
+	# alnfile='hg19.'$S'.net.gz'
 	alnfile='hg38.'$S'.net.gz'
 	wget $DLPATH'vs'$UPPER_S'/'$alnfile -P 'data/alignments/'
 	gzip -d 'data/alignments/'$alnfile 
