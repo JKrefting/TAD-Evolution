@@ -18,6 +18,8 @@ set -o errexit
 mkdir -p 'data/liftover/'
 wget http://hgdownload.cse.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz -P 'data/liftover/' 
 wget http://hgdownload.cse.ucsc.edu/goldenPath/hg18/liftOver/hg18ToHg19.over.chain.gz -P 'data/liftover/' 
+wget http://hgdownload.cse.ucsc.edu/goldenPath/hg18/liftOver/hg18ToHg38.over.chain.gz -P 'data/liftover/' 
+wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz -P 'data/liftover/' 
 gunzip 'data/liftover/'*.gz
 
 # download liftOver tool from UCSC:
@@ -35,10 +37,17 @@ mkdir -p 'data/TADs/'
 wget -P 'data/TADs/' ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE63nnn/GSE63525/suppl/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt.gz
 gunzip 'data/TADs/'GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt.gz
 # reformat into bed file
-tail -n +2 'data/TADs/'GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt \
+tail -n +2 data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.txt \
 			|cut -f 1-3 \
 			| sed -e 's/^/chr/' \
-			> 'data/TADs/'GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.bed 
+			> data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.bed 
+
+# liftover to hg19
+bin/liftOver \
+  data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.bed  \
+  data/liftover/hg19ToHg38.over.chain \
+  data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.hg38.bed \
+  data/TADs/GSE63525_GM12878_primary+replicate_Arrowhead_domainlist.hg19Tohg38_unmapped.bed
 
 	
 # TAD calls of Dixon et al 2012, hESC
@@ -48,15 +57,21 @@ tar xvfz 'data/TADs/'hESC.domain.tar.gz -C 'data/TADs/'
 cp 'data/TADs/hESC/combined/'total.combined.domain 'data/TADs/'hESC.hg18.bed
 rm -r 'data/TADs/hESC/'
 # liftover to hg19
-	'bin/'liftOver \
-        'data/TADs/'hESC.hg18.bed \
-        'data/liftover/'hg18ToHg19.over.chain \
-        'data/TADs/'hESC.hg19.bed \
-        'data/TADs/'hESC.hg18Tohg19_unmapped.bed
+bin/liftOver \
+      data/TADs/hESC.hg18.bed \
+      data/liftover/hg18ToHg38.over.chain \
+      data/TADs/hESC.hg38.bed \
+      data/TADs/hESC.hg18Tohg38_unmapped.bed
 
 # GRBs of Harmston et al 2016
 wget -P 'data/TADs/' https://static-content.springer.com/esm/art%3A10.1038%2Fs41467-017-00524-5/MediaObjects/41467_2017_524_MOESM2_ESM.txt
 cut -f1-3 'data/TADs/'41467_2017_524_MOESM2_ESM.txt | tail -n +2 > 'data/TADs/'41467_2017_524_MOESM2_ESM.bed
+
+bin/liftOver \
+  data/TADs/41467_2017_524_MOESM2_ESM.bed \
+  data/liftover/hg19ToHg38.over.chain \
+  data/TADs/41467_2017_524_MOESM2_ESM.hg38.bed \
+  data/TADs/41467_2017_524_MOESM2_ESM.hg19Tohg38_unmapped.bed
 
 # ------------------------------------------------------------------------------------------------
 # Alignments
