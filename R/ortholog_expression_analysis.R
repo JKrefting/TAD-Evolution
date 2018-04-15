@@ -2,7 +2,8 @@
 # Comparing expression levels of orthologous genes with regard to conserved TADs and TAD rearrangements
 # =============================================================================================================================
 
-require(BSgenome.Hsapiens.UCSC.hg19)
+# require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(biomaRt)
 require(tidyverse)
 require(stringr)
@@ -23,9 +24,11 @@ CONSV_BP_THR <- THRESHOLDS[1]
 # Rearranged domains have breakpoints from the largest threshold
 REARR_BP_THR <- THRESHOLDS[3]
 
+ENSEMBL_URL = "aug2017.archive.ensembl.org"
+
 # Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
+# genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 # =============================================================================================================================
 # read domains with classification
 # =============================================================================================================================
@@ -56,7 +59,7 @@ mouse_exp_match <- read_tsv(
 # ------------------------------------------------------------------------------------------- 
 
 # Load gene ensembl human gene ids and orthologs
-ensembl <- useMart(host = "grch37.ensembl.org", 
+ensembl <- useMart(host = ENSEMBL_URL, 
                    biomart = "ENSEMBL_MART_ENSEMBL", 
                    dataset = "hsapiens_gene_ensembl")
 
