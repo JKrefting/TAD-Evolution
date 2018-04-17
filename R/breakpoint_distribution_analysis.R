@@ -3,9 +3,10 @@
 # Analysis of rearrangement breakpoint distributions with regard to stuctural domains of the human genome. 
 # =============================================================================================================================
 
+# require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
+require(rtracklayer)
 require(tidyverse)
-require(stringr)
-require(BSgenome.Hsapiens.UCSC.hg19)
 
 source("R/functions.R")
 
@@ -34,6 +35,8 @@ NCONTROLS <- unlist(METADATA %>%
 
 # read domain to GRB overlap assignent
 domain_to_GRB <- read_rds("results/domain_to_GRB.rds")
+
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints around structural domains
@@ -79,6 +82,30 @@ domains_combined = bind_rows(
   screened_domains
   )
 
+
+# parse domains and tile in bins
+domain_gr_df <- domains_combined %>% 
+  mutate(
+    domains_plus = map(gr, ~ resize(.x, fix = "center", width = 2 * width(.x))),
+    domain_plus_bin = map(domains_plus, tile, NBINS),
+  )
+
+allDF <- domains_combined %>% 
+  # select(domain_type, domain_subtype, gr) %>% 
+  expand(nesting(domain_type, domain_subtype), threshold = THRESHOLDS, 
+         species = SPECIES$genome_assembly) %>% 
+  mutate(
+    bp_file = str_c("data/breakpoints/hg38.", species, ".", threshold, ".bp.bed"),
+    breakpoints = map(bp_file, import.bed, seqinfo = hum_seqinfo)
+  ) %>% 
+  left_join(domain_gr_df, by = c("domain_type", "domain_subtype")) %>% 
+  mutate(
+    countDF = map2(breakpoints, domain_plus_bin, ~ tibble(
+        bins = seq_along(NBINS),
+        hits = calcHitsPerBin(.x, .y, NBINS)
+      ))
+  )
+
 domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   
   domains_df <- domains_combined[dm_set_idx, ]
@@ -91,7 +118,7 @@ domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
   domain_subtype <- domains_df %>% pull(domain_subtype)
   
   # enlarge each domain by 50% of its width to each side
-  domains_plus <- resize(domains, fix = "center", width= 2 * width(domains))
+  domains_plus <- resize(domains, fix = "center", width = 2 * width(domains))
   
   # returns GRangesList in which every domain is subdivided into NBINS
   domains_plus_bins <- tile(domains_plus, NBINS)
@@ -106,7 +133,7 @@ domain_result_list <- map(1:nrow(domains_combined), function(dm_set_idx){
       
       # load breakpoint and TAD bed files
       # breakpoints <- readBPFile(S, THR)
-      bp_file <- paste0("data/breakpoints/hg19.", S, ".", 
+      bp_file <- paste0("data/breakpoints/hg38.", S, ".", 
                         as.character(format(THR, scientific = FALSE)), ".bp.bed")
       
       breakpoints <- import.bed(bp_file, seqinfo = hum_seqinfo)
@@ -196,6 +223,7 @@ results <- bind_rows(domain_result_list)
 dir.create("results/", showWarnings = FALSE)
 write_tsv(results, "results/breakpoints_at_domains.tsv")
 write_rds(results, "results/breakpoints_at_domains.rds")
+
 
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoints at BOUNDARIES of structural domains
