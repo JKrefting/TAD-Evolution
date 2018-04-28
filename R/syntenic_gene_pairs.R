@@ -301,11 +301,10 @@ fdrDF <- tidyDF %>%
     specificity = TN / (TN + FP)
   )
 
-fdrDF
-  
+
 write_tsv(fdrDF, "results/syntenic_gene_pairs.hg38_mouse.fdrDF.tsv")  
 write_rds(fdrDF, "results/syntenic_gene_pairs.hg38_mouse.fdrDF.rds")  
-
+# fdrDF <- read_rds("results/syntenic_gene_pairs.hg38_mouse.fdrDF.rds")
 
 # example testing -------------------------------------------------------------#
 
