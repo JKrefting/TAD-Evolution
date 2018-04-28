@@ -25,6 +25,11 @@ for S in $SPECIES ; do
 			-o 'data/breakpoints/'hg38.$S.$T.bp.bed \
 			-t $T
 			
+			# filter for plain chromosomes
+      cat data/breakpoints/hg38.$S.$T.bp.bed \
+        | egrep -v "(KI|GL|JH)" \
+        > data/breakpoints/hg38.$S.$T.bp.flt.bed
+
 # 			# liftover to hg19
 # 			'bin/'liftOver \
 #         	'data/breakpoints/'hg38.$S.$T.bp.bed \
