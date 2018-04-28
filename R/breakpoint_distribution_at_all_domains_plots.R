@@ -18,15 +18,16 @@ METADATA <- read_tsv("metadata.tsv")
 
 ACTUAL_RANDOM_COLORS = brewer.pal(9, "Set1")[c(2, 9)] # blue, gray
 
-# =============================================================================================================================
+# ==============================================================================
 # Plot breakpoint distributions at whole domain
-# =============================================================================================================================
+# ==============================================================================
 
 # store results here
 out_dir <- "results/whole_domain/"
 dir.create(out_dir, showWarnings = FALSE)
 
-data <- read_rds("results/breakpoints_at_domains.rds")
+# data <- read_rds("results/breakpoints_at_domains.rds")
+data <- read_rds("results/breakpoints_at_domains_new.rds")
 
 # combine hits by sample replicates
 data_combined <- data %>% 
@@ -87,7 +88,7 @@ for (D in DOMAINS$domain_type){
     
     trivial_name <- simpleCap(this_plot_data[1,] %>% pull(trivial_name))
 
-    ggplot(this_plot_data, 
+    p <- ggplot(this_plot_data, 
            aes(x = bin + 0.5, y = mean_percent, colour = sample_thr)) +
       
       geom_line(aes(linetype = sample)) + 
@@ -165,7 +166,7 @@ group_cols <- c(brewer.pal(5,"Blues"), brewer.pal(5,"Greys"))
 group_cols <- group_cols[c(3, 7, 4, 8, 5, 10)]
 
 
-ggplot(plot_data, 
+p <- ggplot(plot_data, 
        aes(x = bin + 0.5, y = mean_percent, colour = sample_thr)) +
   
   geom_line(aes(linetype = sample)) + 
