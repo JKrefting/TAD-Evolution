@@ -26,16 +26,10 @@ for S in $SPECIES ; do
 			-t $T
 			
 			# filter for plain chromosomes
-      cat data/breakpoints/hg38.$S.$T.bp.bed \
-        | egrep -v "(KI|GL|JH)" \
+      cat data/breakpoints/hg38.${S}.${T}.bp.bed \
+        | egrep -v "(KI|GL|JH|KB)" \
         > data/breakpoints/hg38.$S.$T.bp.flt.bed
 
-# 			# liftover to hg19
-# 			'bin/'liftOver \
-#         	'data/breakpoints/'hg38.$S.$T.bp.bed \
-#         	'data/liftover/'hg38ToHg19.over.chain \
-#         	'data/breakpoints/'hg19.$S.$T.bp.bed \
-#         	'data/breakpoints/'hg38Tohg19.$S.$T.unmapped.bp.bed
 	done
 	
 	# get the coordinates of syntenic alignment blocks (fills)
@@ -43,10 +37,4 @@ for S in $SPECIES ; do
 			-i 'data/alignments/'hg38.$S.net \
 			-o 'data/fills/'hg38.$S.fill.bed
 			
-# 			# liftover to hg19
-# 			'bin/'liftOver \
-#         	'data/fills/'hg38.$S.fill.bed \
-#         	'data/liftover/'hg38ToHg19.over.chain \
-#         	'data/fills/'hg19.$S.fill.bed \
-#         	'data/fills/'hg38Tohg19.$S.unmapped.fill.bed
 done
