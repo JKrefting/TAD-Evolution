@@ -5,16 +5,20 @@ import sys
 import argparse
 
 def commandline():
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description=__doc__, 
+    		formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-i", "--input_file", type=str, required=True,
-                        help="Path to input file in  Net format. See https://genome.ucsc.edu/goldenpath/help/net.html")
-    parser.add_argument("-o", "--output_file", type=str, required=False, default="outfile.bp.bed",
-                        help="Filename of fills in BED file.")
+                        help="Path to input file in  Net format. \
+                        See https://genome.ucsc.edu/goldenpath/help/net.html")
+    parser.add_argument("-o", "--output_file", type=str, 
+    		required=False, default="outfile.bp.bed",
+    		help="Filename of fills in BED file.")
 
     return parser.parse_args()
 
 # size_threshold: only fills with sizes >threshold will be considered
-# bp_list (returned): list of all bp, needed to calculate sizes of rearrangement blocks (synteny blocks)
+# bp_list (returned): list of all bp, needed to calculate sizes of rearrangement 
+# blocks (synteny blocks)
 def checkFillSize(infile, outfile):
 	
     print('INFO: Net alignment infile: ', infile)
@@ -36,7 +40,10 @@ def checkFillSize(infile, outfile):
             end = str(int(content[1]) + int(content[2]))
             fill_type = content[content.index('type') + 1]
 
-            outfile.write(chrom + "\t" + start + "\t" + end + "\t" + fill_type + "\n")
+            outfile.write(chrom + "\t" + 
+            		start + "\t" + 
+            		end + "\t" + 
+            		fill_type + "\n")
 
     infile.close()
     outfile.close()
