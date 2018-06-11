@@ -16,12 +16,15 @@ def commandline():
 # size_threshold: only fills with sizes >threshold will be considered
 # bp_list (returned): list of all bp, needed to calculate sizes of rearrangement blocks (synteny blocks)
 def checkFillSize(infile, outfile):
-	
-    print('INFO: Net alignment infile: ', infile)
-    print('INFO: Writing fills to: ', outfile)	
+      
+    outfile_table = outfile + ".tsv"
+    print('INFO: Net alignment infile: ' + infile)
+    print('INFO: Writing fills to: ' + outfile)  
+    print('INFO: Writing fills to: ' + outfile_table)    
 
     infile = open(infile, 'r')
     outfile = open(outfile, 'w')
+    outfile_table = open(outfile_table, 'w')
 
     for line in infile:
         line = line.lstrip()
@@ -35,8 +38,10 @@ def checkFillSize(infile, outfile):
             start = content[1]
             end = str(int(content[1]) + int(content[2]))
             fill_type = content[content.index('type') + 1]
+            annot_cols = content[3:5]
 
             outfile.write(chrom + "\t" + start + "\t" + end + "\t" + fill_type + "\n")
+            outfile_table.write(chrom + "\t" + start + "\t" + end + "\t" + fill_type + "\t" + "\t".join(annot_cols) + "\n")
 
     infile.close()
     outfile.close()
