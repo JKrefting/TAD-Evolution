@@ -10,7 +10,7 @@ readFillFile <- function(species, seqinfo){
 readBPFile <- function(species, threshold){
   bp_file <- paste0("data/breakpoints/hg38.", species, ".", 
                     as.character(format(threshold, scientific = FALSE)), ".bp.bed")
-  return(import(bp_file, seqinfo = hum_seqinfo))
+return(import(bp_file, seqinfo = hum_seqinfo))
 }
 
 # ' Calculates the number of breakpoints that fall into each bin for each region
