@@ -3,7 +3,7 @@
 # Plots of data after preprocessing: fills and breakpoints extracted from whole-genome alignemnts (net files)
 # =============================================================================================================================
 
-require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 source("R/functions.R")
 
 require(tidyverse)
@@ -25,8 +25,7 @@ THRESHOLDS <- unlist(METADATA %>%
 COL_SPECIES = brewer.pal(12, "Set3")
 
 # Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 
 # -------------------------------------------------------------
 # Fills
@@ -41,7 +40,7 @@ data_df <- SPECIES %>%
     fills = map(genome_assembly, readFillFile, seqinfo = hum_seqinfo),
     size = map(fills, width),
     type = map(fills, function(gr) mcols(gr)$name)
-    ) %>% 
+  ) %>% 
   select(-fills, -genome_assembly) %>% 
   unnest(size, type) %>% 
   # order species as factor and rename types
