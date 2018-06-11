@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# ================================================================================================
-# Get the coordinates of rearrangement breakpoints (from whole-genome alignments) and save in BED format using python scripts.
-# ================================================================================================
+# ==============================================================================
+# Get the coordinates of rearrangement breakpoints (from whole-genome alignments) 
+# and save in BED format using python scripts.
+# ==============================================================================
 
 set -o errexit # stop script on first error
 
@@ -31,10 +32,10 @@ for S in $SPECIES ; do
         > data/breakpoints/hg38.$S.$T.bp.flt.bed
 
 	done
-	
-	# get the coordinates of syntenic alignment blocks (fills)
-	python Python/get_fills.py \
-			-i 'data/alignments/'hg38.$S.net \
-			-o 'data/fills/'hg38.$S.fill.bed
-			
+  
+  # get the coordinates of syntenic alignment blocks (fills)
+  python Python/get_fills.py  \
+    -i data/alignments/hg38.$S.net \
+    -o data/fills/hg38.$S.fill.bed
+
 done
