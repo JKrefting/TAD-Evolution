@@ -25,10 +25,10 @@
 require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(TxDb.Mmusculus.UCSC.mm10.knownGene)
 require(biomaRt)
+source("R/functions.R")
 require(tidyverse)
 require(stringr)
 
-source("R/functions.R")
 
 ENSEMBL_URL = "aug2017.archive.ensembl.org"
 
@@ -103,7 +103,8 @@ speciesDF <- speciesDF %>%
   )
 
 write_rds(speciesDF, "results/speciesDF.rds")
-
+#speciesDF <- read_rds("results/speciesDF.rds")
+#speciesDF <- read_rds("results/speciesDF_SAVE_2018-05-27.rds")
 
 syntenicDF <- speciesDF %>% 
   select(genome_assembly, trivial_name, df) %>% 
@@ -174,7 +175,6 @@ p <- ggplot(syntenic_performance_DF, aes(x = sensitivity, y = PPV, color = trivi
   lims(x = c(0, 1), y = c(0, 1))
 p
 
-
 # example testing -------------------------------------------------------------#
 
 # false positiv breakpoints:
@@ -194,3 +194,74 @@ false_positives <- syntenicDF %>%
   write_tsv("results/syntenic_gene_pairs.hg38_chimpanzee.false_positive_pairs_100000.tsv")
 
 
+# Get syntenic regions for each species and thresholdg ------------------------#
+
+# get for each species and threshold a GRanges with syntenic regions
+get_pair_range <- function(df, tssGR){
+  
+  gr1 = tssGR[match(df$g1, tssGR$geneID)]
+  gr2 = tssGR[match(df$g2, tssGR$geneID)]
+  
+  # build GRanges for span of adjacent paris
+  pairGR <- GRanges(
+    seqnames = seqnames(gr1),
+    IRanges(start(gr1), start(gr2)),
+    seqinfo = seqinfo(gr1)
+  )
+  return(pairGR)
+}
+
+
+syntenic_ranges_DF <- crossing(
+    genome_assembly = SPECIES$genome_assembly,
+    size_threshold = THRESHOLDS
+    ) %>% 
+  mutate(
+    filtered_df = map2(genome_assembly, size_threshold, 
+                         ~filter(syntenicDF,
+                             genome_assembly == .x, 
+                             size_threshold == .y,
+                             syntenic,
+                             dist <= size_threshold,
+                             !syntenic | dist_species <= size_threshold)
+                    ),
+    syntenic_range = map(filtered_df, get_pair_range, tssGR),
+    n_ranges = map_int(syntenic_range, length) 
+  )
+
+write_rds(syntenic_ranges_DF, "results/syntenic_genes.syntenic_ranges_DF.rds")
+
+
+# Read all breakpoint files and filter for syntenic regions
+
+write_bed_wrapper <- function(gr, out_file, ...){
+  if(length(gr) > 0){
+    export.bed(gr, out_file, ...)
+  }else{
+    write("", out_file)
+  }
+}
+
+
+nonsyn_flt_df <- syntenic_ranges_DF %>% 
+  mutate(
+    bp_file = str_c("data/breakpoints/hg38.", genome_assembly, ".",
+                           size_threshold,  ".bp.flt.bed"),
+    bp = map(bp_file, import.bed),
+    nonsyn_bp = map2(bp, syntenic_range, ~ .x[countOverlaps(.x, .y) == 0]),
+    out_file = str_replace(bp_file, ".bed$", ".nonsyn_flt.bed"),
+    n_bp = map_int(bp, length),
+    n_nonsyn_bp = map_int(nonsyn_bp, length),
+    rate_nonsyn = n_nonsyn_bp / n_bp,
+    out = map2(nonsyn_bp, out_file, write_bed_wrapper)
+  )
+
+write_rds(nonsyn_flt_df, "results/syntenic_gene_pairs.nonsyn_flt_df.rds")
+
+
+p <- ggplot(nonsyn_flt_df, aes(x = genome_assembly, y = rate_nonsyn, fill = factor(size_threshold))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = round(rate_nonsyn, 2)), position = position_dodge(.9), hjust = "right") +
+  coord_flip() +
+  theme_bw()
+p
