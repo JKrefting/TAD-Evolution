@@ -24,7 +24,7 @@ METADATA <- read_tsv("metadata.tsv")
 out_dir <- "results/whole_domain/"
 dir.create(out_dir, showWarnings = FALSE)
 
-data <- read_rds("results/breakpoints_at_domains_new.rds")
+data <- read_rds("results/breakpoints_at_domains.rds")
 
 # combine hits by sample replicates
 data_combined <- data %>% 

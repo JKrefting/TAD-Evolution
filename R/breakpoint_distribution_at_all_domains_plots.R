@@ -26,8 +26,7 @@ ACTUAL_RANDOM_COLORS = brewer.pal(9, "Set1")[c(2, 9)] # blue, gray
 out_dir <- "results/whole_domain/"
 dir.create(out_dir, showWarnings = FALSE)
 
-# data <- read_rds("results/breakpoints_at_domains.rds")
-data <- read_rds("results/breakpoints_at_domains_new.rds")
+data <- read_rds("results/breakpoints_at_domains.rds")
 
 # combine hits by sample replicates
 data_combined <- data %>% 
