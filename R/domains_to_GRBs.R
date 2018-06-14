@@ -7,7 +7,7 @@ require(rtracklayer)
 require(tidyverse)
 
 # Read metadata for analysis
-DOMAINS <- read_tsv("domains_meta.tsv")
+DOMAINS <- read_tsv("domains_meta.tsv", col_types = "ccc")
 
 # Load human seqinfo
 # genome <- BSgenome.Hsapiens.UCSC.hg19
