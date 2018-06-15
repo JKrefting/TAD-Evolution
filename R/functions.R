@@ -2,15 +2,15 @@ require(rtracklayer)
 
 # Read in fill BED file
 readFillFile <- function(species, seqinfo){
- fi_file <- paste0("data/fills/hg19.", species, ".fill.bed")
+ fi_file <- paste0("data/fills/hg38.", species, ".fill.bed")
   return(import(fi_file, seqinfo = seqinfo))
 }
 
 # Read in breakpoint BED file
-readBPFile <- function(species, threshold){
-  bp_file <- paste0("data/breakpoints/hg19.", species, ".", 
-                    as.character(format(threshold, scientific = FALSE)), ".bp.bed")
-  return(import(bp_file, seqinfo = hum_seqinfo))
+readBPFile <- function(species, threshold, seqinfo){
+  bp_file <- paste0("data/breakpoints/hg38.", species, ".", 
+                    as.character(format(threshold, scientific = FALSE)), ".bp.flt.flt_adj_fill.bed")
+return(import(bp_file, seqinfo = seqinfo))
 }
 
 # ' Calculates the number of breakpoints that fall into each bin for each region
@@ -86,4 +86,158 @@ simpleCap <- function(x) {
   s <- strsplit(x, " ")[[1]]
   paste(toupper(substring(s, 1,1)), substring(s, 2),
         sep="", collapse=" ")
+}
+
+#' Get tss coordinates as GRanges for largest transcript per gene from ensembl
+get_species_tssGR <- function(species_str, ensembl_url = "aug2017.archive.ensembl.org"){
+  
+  # Load gene ensembl species gene ids and orthologs
+  species_ensembl <- useMart(host = ENSEMBL_URL, 
+                           biomart = "ENSEMBL_MART_ENSEMBL", 
+                           dataset = str_c(species_str, "_gene_ensembl"))
+  
+  # Get species transcription start sites
+  species_tss_df <- as.tibble(getBM(attributes=c(
+    'ensembl_gene_id', 'external_gene_name', 'chromosome_name', 'strand',
+    'transcription_start_site', 'transcript_start', 'transcript_end'), 
+    mart = species_ensembl)
+  ) %>% 
+  # Filter out duplicated entries (take only TSS from largest transcript)
+  mutate(transcript_length = transcript_end - transcript_start) %>% 
+  arrange(ensembl_gene_id, desc(transcript_length)) %>% 
+  distinct(ensembl_gene_id, .keep_all = TRUE)
+
+  # Generate GRanges
+  speciesTssGR <- GRanges(seqnames = species_tss_df$chromosome_name,
+                        strand = ifelse(species_tss_df$strand == 1, "+", "-"),
+                        ranges = IRanges(start = species_tss_df$transcription_start_site,
+                                         width = 1),
+                        geneID = species_tss_df$ensembl_gene_id,
+                        gene_name = species_tss_df$external_gene_name
+  )
+  
+  return(speciesTssGR)
+}
+
+#' get one-to-one orthologs to all human genes from target species via ensembl
+get_orthologs <- function(species_str, mart){
+  
+  # Attributes that are returned
+  orth_attr = c("ensembl_gene_id",  
+                str_c(species_str, "_homolog_ensembl_gene"), 
+                str_c(species_str, "_homolog_orthology_type"), 
+                str_c(species_str, "_homolog_orthology_confidence"))
+  
+  # Query orthologs by human gene ID
+  orthologsDF = getBM(attributes = orth_attr, mart = mart) 
+  
+  names(orthologsDF) <- names(orthologsDF) %>% 
+    str_replace(species_str, "species")
+  # filter all human genes to have an "one2one" ortholog in mouse
+  orthologs <- as.tibble(orthologsDF) %>% 
+    filter(
+      species_homolog_ensembl_gene != "",
+      species_homolog_orthology_type == "ortholog_one2one"
+    ) %>% 
+    select(ensembl_gene_id, species_homolog_ensembl_gene)
+  
+  return(orthologs)  
+}
+
+#' get all adjacent ranges  
+getAdjacentPairs <- function(tssGR){
+  
+  # get the next tss for each gene along the chromsome
+  # using the precede() function from GenomicRanges package
+  nextGene = precede(tssGR, ignore.strand = TRUE)
+  
+  firstGR <- tssGR[!is.na(nextGene)]
+  nextGR <- tssGR[nextGene[!is.na(nextGene)]]
+  
+  gP = tibble(
+    g1 = firstGR$geneID, 
+    g2 = nextGR$geneID,
+    dist = abs(start(firstGR) - start(nextGR)),
+    strand = case_when(
+      as.logical(strand(firstGR) == strand(nextGR)) ~ "same",
+      as.logical(strand(firstGR) == "+" & strand(nextGR) == "-") ~ "convergent",
+      as.logical(strand(firstGR) == "-" & strand(nextGR) == "+") ~ "divergent"
+    )
+  )
+  
+}
+
+  
+#' For all human adjacent genes get orthologs in target speceis and whether they
+#' are syntenic.
+#' 
+get_syntenic_pairs <- function(species_str, assembly_str, tssGR, 
+                               ensembl_url = "aug2017.archive.ensembl.org",
+                               size_thresholds = c(10000, 100000, 1000000)) {
+  
+  mart <- useMart(host = ENSEMBL_URL,
+                         biomart = "ENSEMBL_MART_ENSEMBL", 
+                         dataset = "hsapiens_gene_ensembl")
+  
+  speciesTssGR <- get_species_tssGR(species_str, ensembl_url)
+  orthologs <- get_orthologs(species_str, mart)
+  
+  human_ortholog_GR <- tssGR[tssGR$geneID %in% orthologs$ensembl_gene_id]
+  species_ortholog_GR <- speciesTssGR[speciesTssGR$geneID %in% orthologs$species_homolog_ensembl_gene]
+  
+  human_adjacent <- getAdjacentPairs(human_ortholog_GR)
+  species_adjacent <- getAdjacentPairs(species_ortholog_GR)
+
+  # douplicate species adjacent pairs to have A-B and B-A pairs
+  species_adjacent_all <- bind_rows(
+    species_adjacent,
+    rename(species_adjacent, g1 = g2, g2 = g1)
+  ) %>% 
+  rename(dist_species = dist, 
+         strand_species = strand) %>% 
+  mutate(adjacent_species = TRUE)
+  
+  df <- human_adjacent %>% 
+    # add ortholog to first gene
+    left_join(orthologs, by = c("g1" = "ensembl_gene_id")) %>% 
+    rename(g1_species = species_homolog_ensembl_gene) %>% 
+    # add ortholog to second gene
+    left_join(orthologs, by = c("g2" = "ensembl_gene_id")) %>% 
+    rename(g2_species = species_homolog_ensembl_gene) %>% 
+    # test if orthologs are adjacent
+    left_join(species_adjacent_all, by = c("g1_species" = "g1", "g2_species" = "g2")) %>% 
+    mutate(
+      adjacent_species = !is.na(adjacent_species),
+      same_strand = strand == strand_species,
+      syntenic = adjacent_species & same_strand
+    )
+  
+  # build GRanges for span of adjacent paris
+  gr1 = tssGR[match(df$g1, tssGR$geneID)]
+  gr2 = tssGR[match(df$g2, tssGR$geneID)]
+  
+  adjacentGR <- GRanges(
+    seqnames = seqnames(gr1),
+    IRanges(start(gr1), start(gr2)),
+    seqinfo = seqinfo(gr1)
+  )
+  
+  # read breakpoint data and compute overlap with adjacent gene regions
+  rearranged = size_thresholds %>%
+    set_names(str_c("breakpoints_", size_thresholds %>% format(scientific = FALSE) %>% str_trim)) %>%
+    
+    # build path to breakpoint file
+    map(~ paste0("data/breakpoints/hg38.", assembly_str, ".",
+                 as.character(format(.x, scientific = FALSE)),  ".bp.flt.bed")) %>%
+    # read breakopoints
+    map(import.bed) %>% 
+    
+    # get rearraged pairs by overlap with adjacent region
+    map(~ overlapsAny(adjacentGR, .x)) %>% 
+    as.tibble()
+  
+  # add rearraged columns to df
+  df <- df %>% 
+    bind_cols(rearranged)
+  
 }

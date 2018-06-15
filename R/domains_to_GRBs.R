@@ -1,16 +1,17 @@
 #*******************************************************************************
 # Associate TADs to GRBs by grouping TADs in GRB-TADs, and Non-GRB-TADs
 #*******************************************************************************
-require(BSgenome.Hsapiens.UCSC.hg19)
+# require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(rtracklayer)
 require(tidyverse)
 
 # Read metadata for analysis
-DOMAINS <- read_tsv("domains_meta.tsv")
+DOMAINS <- read_tsv("domains_meta.tsv", col_types = "ccc")
 
 # Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
+# genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 
 
 #' Screen TADs for GRB overlp and report for each TAD one of three classes.

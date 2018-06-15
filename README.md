@@ -34,11 +34,18 @@ For downloading all external data, execute the [bash/download.sh](bash/download.
 ```{bash}
 sh bash/download.sh
 ```
-Then, rearrangement breakpoints can be extracted from net-files for all species:
+Rearrangement breakpoints can be extracted from net-files for all species:
 
 ```{bash}
 sh bash/preprocess.sh
 ```
+The extracted breakpoints are furhter filtered in this script:
+
+ - [breakpoint_refinment.R](R/breakpoint_refinment.R)
+ 
+ Furthermore, we nee to sub-devide the TADs into GRB-TADs and non-GRB TADs:
+ 
+ - [domains_to_GRBs.R](R/domains_to_GRBs.R)
 
 ## Fill number and size distribution
 Syntenic regions and breakpoitns are analysed in:

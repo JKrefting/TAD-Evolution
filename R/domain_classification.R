@@ -1,4 +1,5 @@
-require(BSgenome.Hsapiens.UCSC.hg19)
+# require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(biomaRt)
 require(tidyverse)
 require(stringr)
@@ -21,9 +22,8 @@ REARR_BP_THR <- THRESHOLDS[3]
 
 
 # Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
-
+# genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 # =============================================================================================================================
 # Prerequisite for domain categorisation in rearranged and conserved domains. 
 # For every domain determine if #1 it is enclosed by a syntenic block (chain) #2 a rearrangement breakpoint 

@@ -2,7 +2,8 @@
 # Comparing expression levels of orthologous genes with regard to conserved TADs and TAD rearrangements
 # =============================================================================================================================
 
-require(BSgenome.Hsapiens.UCSC.hg19)
+# require(BSgenome.Hsapiens.UCSC.hg19)
+require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(biomaRt)
 require(tidyverse)
 require(stringr)
@@ -23,9 +24,11 @@ CONSV_BP_THR <- THRESHOLDS[1]
 # Rearranged domains have breakpoints from the largest threshold
 REARR_BP_THR <- THRESHOLDS[3]
 
+ENSEMBL_URL = "aug2017.archive.ensembl.org"
+
 # Load human seqinfo
-genome <- BSgenome.Hsapiens.UCSC.hg19
-hum_seqinfo <- seqinfo(genome)
+# genome <- BSgenome.Hsapiens.UCSC.hg19
+hum_seqinfo <- seqinfo(TxDb.Hsapiens.UCSC.hg38.knownGene)
 # =============================================================================================================================
 # read domains with classification
 # =============================================================================================================================
@@ -56,7 +59,7 @@ mouse_exp_match <- read_tsv(
 # ------------------------------------------------------------------------------------------- 
 
 # Load gene ensembl human gene ids and orthologs
-ensembl <- useMart(host = "grch37.ensembl.org", 
+ensembl <- useMart(host = ENSEMBL_URL, 
                    biomart = "ENSEMBL_MART_ENSEMBL", 
                    dataset = "hsapiens_gene_ensembl")
 
@@ -68,7 +71,7 @@ orth_attr = c("ensembl_gene_id",  "mmusculus_homolog_ensembl_gene",
 # Query orthologs by human gene ID
 orthologsDF = getBM(attributes = orth_attr, mart = ensembl) 
 
-# filter all human genes to have an "one2one" ortholog in mouse with confidance  = 1
+# filter all human genes to have an "one2one" ortholog in mouse
 orthologs <- as.tibble(orthologsDF) %>% 
   filter(
     mmusculus_homolog_ensembl_gene != "",
@@ -80,6 +83,18 @@ orthologs_with_exp <- orthologs %>%
   filter(ensembl_gene_id %in% human_exp_match$`Gene ID`) %>% 
   filter(mmusculus_homolog_ensembl_gene %in% mouse_exp_match$`Gene ID`) %>% 
   select(-mmusculus_homolog_orthology_type, -mmusculus_homolog_orthology_confidence)
+
+
+# get fraction of one2many ortholog pairs
+ortholog_type_count <- as.tibble(orthologsDF) %>% 
+  filter(
+    mmusculus_homolog_ensembl_gene != "",
+    ensembl_gene_id %in% human_exp_match$`Gene ID`,
+    mmusculus_homolog_ensembl_gene %in% mouse_exp_match$`Gene ID`
+  ) %>% 
+  count(mmusculus_homolog_orthology_type) %>% 
+  mutate(percent = n / sum(n) * 100) %>% 
+  write_tsv("results/ortholog_type_count.tsv")
 
 # --------------------------------------------------------------------------------------------
 # Prepare data for correlation
