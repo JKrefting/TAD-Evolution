@@ -2,6 +2,7 @@
 # =============================================================================================================================
 # Plot breakpoint distributions with regard to stuctural domains of the human genome. 
 # =============================================================================================================================
+source("R/functions.R")
 
 require(tidyverse)
 require(ggplot2)
@@ -9,7 +10,6 @@ require(RColorBrewer)
 require(ggsignif)
 require(stringr)
 
-source("R/functions.R")
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -236,6 +236,7 @@ SPECIES_NAMES <- map(unname(unlist(SPECIES %>%
 NSPECIES <- length(SELECTED_SPECIES)
 NSAMPLES <- length(unique(data_combined$sample))
 NTHR <- length(THRESHOLDS)
+THR = THRESHOLDS[1]
 
 # sample names
 SAMPLES <- unique(data_combined$sample)
@@ -252,7 +253,9 @@ group_labels <- str_c(rep(SPECIES_NAMES, each = NSAMPLES),
 
 plot_data <- data_combined %>% 
   left_join(SPECIES, by = c("species" = "genome_assembly")) %>% 
-  filter(species %in% SELECTED_SPECIES, threshold == 10000, domain_type == "hESC") %>%
+  dplyr::filter(species %in% SELECTED_SPECIES, 
+                threshold == 10000, 
+                domain_type == "hESC") %>%
   mutate(species_sample_thr = str_c(species, "_", sample, "_", threshold)) %>%
   mutate(species_sample_thr = factor(species_sample_thr, levels = group_levels, labels = group_labels),
          linetype = ifelse(sample == "real", "solid", "dashed")) %>%
@@ -635,7 +638,7 @@ ggplot(fisher_results,
   scale_fill_brewer("", palette = "Blues", labels = c("10 kb", "100 kb", "1000 kb")) +
   xlab("") + 
   ylab("log2(odds ratio)") + 
-  ylim(c(-2, 2.5)) +
+  ylim(c(-1, 2.5)) +
   theme_bw() +
   theme(plot.title = element_text(size=14, face = "bold", colour = "black"),
                # strip.background = element_blank(),
@@ -661,20 +664,20 @@ data <- read_rds("results/distances_to_boundaries.rds")
 plot_data <- data %>% 
   filter(boundaries %in% c("hESC", "GM12878")) %>% 
   mutate(
-    species = factor(species, levels = SPECIES$genome_assembly, labels = SPECIES$trivial_name),
+    species = factor(species, levels = rev(SPECIES$genome_assembly), labels = rev(SPECIES$trivial_name)),
     threshold = factor(threshold, levels = THRESHOLDS, labels = c("10 kb", "100 kb", "1000 kb")),
     distance = distance / 1000
   )
 
-
 pValDF <- plot_data %>%
-  group_by(species, threshold, boundaries) %>% 
-  mutate(id = row_number()) %>% 
+  # mutate(species = factor(species, rev(SPECIES$trivial_name))) %>% 
+  group_by(species, threshold, boundaries, type) %>% 
+  mutate(id = row_number()) %>%
   spread(type, distance) %>% 
   summarize(
     n = n(),
     p = ifelse(
-      all(is.na(breakpoints)) | all(is.na(random)),
+      all(is.na(breakpoint)) | all(is.na(random)),
       NA,
       wilcox.test(breakpoint, random)$p.value
     )
