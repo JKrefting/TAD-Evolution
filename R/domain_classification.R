@@ -1,10 +1,10 @@
 # require(BSgenome.Hsapiens.UCSC.hg19)
+
+source("R/functions.R")
 require(TxDb.Hsapiens.UCSC.hg38.knownGene)
 require(biomaRt)
 require(tidyverse)
 require(stringr)
-
-source("R/functions.R")
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -76,7 +76,10 @@ for (D in DOMAINS$domain_path) {
       # occurrs inside a domain with a safety margin of at least 40 kb to each TAD boundary
       print(THR)
       
-      breakpoints <- readBPFile(S, THR)
+      bp_file <- paste0("data/breakpoints/hg38.", S, ".", 
+                        as.character(format(THR, scientific = FALSE)), ".bp.flt.flt_adj_fill.bed")
+      
+      breakpoints <- import.bed(bp_file, seqinfo = hum_seqinfo)
 
       # find rearranged domains
       rearr_by_bp <- overlapsAny(domains_minus, breakpoints)
