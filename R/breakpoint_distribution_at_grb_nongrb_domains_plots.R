@@ -2,6 +2,7 @@
 # =============================================================================================================================
 # Plot breakpoint distributions with regard to stuctural domains of the human genome. 
 # =============================================================================================================================
+source("R/functions.R")
 
 require(tidyverse)
 require(ggplot2)
@@ -9,7 +10,6 @@ require(RColorBrewer)
 require(ggsignif)
 require(stringr)
 
-source("R/functions.R")
 
 # Read metadata for analysis
 SPECIES <- read_tsv("species_meta.tsv")
@@ -75,7 +75,7 @@ plot_data <- data_combined %>%
 # choose colors 
 group_cols <- c(brewer.pal(10,"PuOr"))
 group_cols <- group_cols[c(2, 4, 9, 7)]
-grid::grid.raster(group_cols, int=F)
+# grid::grid.raster(group_cols, int=F)
     
 this_plot_data <- 
   filter(plot_data, species == "mm10", domain_type == "hESC", threshold == 10000)
@@ -130,4 +130,4 @@ ggplot(this_plot_data,
         # panel.grid.minor = element_blank())
   )
 
-ggsave(str_c(out_dir, trivial_name, "_", D ,"grb_subtypes_whole.pdf"), w=6, h=4)
+ggsave(str_c(out_dir, trivial_name, "_", D ,"_grb_subtypes_whole.pdf"), w=6, h=4)
