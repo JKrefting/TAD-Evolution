@@ -128,7 +128,6 @@ all_df <- crossing(domain_gr_df, all_bp_df) %>%
     hits = map2(breakpoints, domain_plus_bin, calcHitsPerBin, NBINS)
   )
 
-
 reakpoints_at_domains <- all_df %>% 
   select(-domain_plus_bin, -breakpoints) %>% 
   unnest(bin, hits)
@@ -181,122 +180,6 @@ boundary_hits_tidy <- boundary_hits %>%
 
 write_rds(boundary_hits_tidy, "results/boundary_hits_tidy.rds")
 
-# domain_result_list <- map(DOMAINS$domain_path, function(D){
-#   
-#   domains <- import(unlist(D), seqinfo = hum_seqinfo)
-#   
-#   # get domain type to store with ever result
-#   domain_type <- unlist(DOMAINS %>%
-#                           filter(domain_path == D) %>%
-#                           dplyr::select(domain_type)
-#   )
-#   
-#   # extract boundaries
-#   boundaries <- c(GRanges(seqnames(domains), 
-#                           IRanges(start(domains), start(domains)), 
-#                           seqinfo = hum_seqinfo),
-#                   GRanges(seqnames(domains), 
-#                           IRanges(end(domains), end(domains)), 
-#                           seqinfo = hum_seqinfo)
-#   )  
-#   
-#   # enlarge
-#   boundaries_plus <- resize(boundaries, fix = "center", BOUNDARY_AREA)
-#   
-#   # returns GRangesList in which every domain is subdivided into NBINS
-#   boundaries_plus_bins <- tile(boundaries_plus, NBINS)
-#   
-#   species_result_list <- map(SPECIES$genome_assembly, function(S){
-#     
-#     thr_result_list <- map(THRESHOLDS, function(THR){
-#       
-#       # load breakpoint and TAD bed files
-#       breakpoints <- readBPFile(S, THR)
-#       
-#       # handle case of no breakpoints for threshold
-#       if (length(breakpoints) < 1){
-#         # tibble to store results for this loop 
-#         # add to results
-#         actual_results <- tibble(
-#           bin = seq(NBINS),
-#           hits = 0,
-#           sample = "real",
-#           replicate = 1,
-#           species = S,
-#           threshold = THR,
-#           domains = domain_type,
-#           n_breakpoints = length(breakpoints)
-#         )
-#         
-#         return(actual_results)
-#       }
-#       
-#       # -------------------------------------------------------------------------------------------------------------------
-#       # Distribution of actual breakpoints
-#       # -------------------------------------------------------------------------------------------------------------------
-#       
-#       # find number of breakpoints that fall into each bin
-#       hits <- calcHitsPerBin(breakpoints, boundaries_plus_bins, NBINS)
-#       
-#       # add to results
-#       actual_results <- tibble(
-#         bin = seq(NBINS),
-#         hits = hits,
-#         sample = "real",
-#         replicate = 1,
-#         species = S,
-#         threshold = THR,
-#         domains = domain_type,
-#         n_breakpoints = length(breakpoints)
-#       )
-#       
-#       # -------------------------------------------------------------------------------------------------------------------
-#       # Distribution of random breakpoints
-#       # -------------------------------------------------------------------------------------------------------------------
-#       
-#       # count number of breakpoints for each chr in 'breakpoints'
-#       breakpoints_per_chr <- tibble(seqnames = as.character(seqnames(breakpoints))) %>%
-#         mutate(seqnames = as.character(seqnames)) %>%
-#         group_by(seqnames) %>%
-#         summarise(count = n())
-#       
-#       control_results_list <- map(seq(NCONTROLS), function(i){
-#         # generate the corresponding number of random breakpoints for each chromosome
-#         rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo)
-#         
-#         # determine distribution of random breakpoints
-#         rdm_hits <- calcHitsPerBin(rdm_breakpoints, boundaries_plus_bins, NBINS)
-#         
-#         # add to results
-#         results_loop <- tibble(
-#           bin = seq(NBINS),
-#           hits = rdm_hits,
-#           sample = "random",
-#           replicate = i,
-#           species = S,
-#           threshold = THR,
-#           domains = domain_type,
-#           n_breakpoints = length(breakpoints)
-#         )
-#         return(results_loop)
-#       })
-#       # return combined tibble for single threshold
-#       return(bind_rows(actual_results, control_results_list))
-#     }) 
-#     # return combined tibble for all thresholds / single species
-#     return(bind_rows(thr_result_list))
-#   })
-#   # return combined tibble for all species / single domain
-#   return(bind_rows(species_result_list))
-# })
-# 
-# results <- bind_rows(domain_result_list)
-# 
-# dir.create("results/", showWarnings = FALSE)
-# write_tsv(results, "results/breakpoints_at_boundaries.tsv")
-# write_rds(results, "results/breakpoints_at_boundaries.rds")
-# results <- read_rds("results/breakpoints_at_boundaries.rds")
-
 # -------------------------------------------------------------------------------------------------------------------
 # Analysis of breakpoint distances to domain boundaries
 # -------------------------------------------------------------------------------------------------------------------
@@ -327,12 +210,14 @@ for (D in DOMAINS$domain_path){
                   )  
   
   
-  for (S in SPECIES$genome_assembly){
+  for (S in SPECIES$genome_assembly) {
     
-    for (THR in THRESHOLDS){
+    for (THR in THRESHOLDS) {
       
       # load breakpoints, if empty -> skip
-      breakpoints <- readBPFile(S, THR)
+      bp_file = paste0("data/breakpoints/hg38.", S, ".", THR, ".bp.flt.flt_adj_fill.bed")
+      breakpoints = import.bed(bp_file, seqinfo = hum_seqinfo)
+      
       if (length(breakpoints) < 1){
         tmp_1 <- tibble(
           boundaries = factor(domain_type),
@@ -358,9 +243,12 @@ for (D in DOMAINS$domain_path){
       
       # do the same for random breakpoints
       # count number of breakpoints for each chr in 'breakpoints'
-      breakpoints_per_chr <- as.tibble(breakpoints) %>%
+      breakpoints_per_chr <- breakpoints %>% 
+        as.data.frame() %>% 
+        as.tibble() %>%
         group_by(seqnames) %>%
         summarise(count = n())
+      
       # generate random breakpoints for each chromosome
       rdm_breakpoints <- sampleBreakpoints(breakpoints_per_chr, hum_seqinfo)
       # calculate distances    
