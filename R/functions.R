@@ -40,7 +40,7 @@ sampleBreakpoints <- function(breakpoints_per_chr, hum_seqinfo){
   
   breakpoints_per_chr <- breakpoints_per_chr %>% 
     mutate(
-      chrom_len = seqlengths(hum_seqinfo[seqnames])
+      chrom_len = seqlengths(hum_seqinfo)[seqnames]
       )
   
   # sample the coordinates of random breakpoints
