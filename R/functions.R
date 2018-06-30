@@ -88,36 +88,34 @@ simpleCap <- function(x) {
         sep="", collapse=" ")
 }
 
-#' Get tss coordinates as GRanges for largest transcript per gene from ensembl
-get_species_tssGR <- function(species_str, ensembl_url = "aug2017.archive.ensembl.org"){
+#' Get gene coordinates as GRanges for largest transcript per gene from ensembl
+get_species_geneGR <- function(species_str, ensembl_url = "aug2017.archive.ensembl.org"){
   
   # Load gene ensembl species gene ids and orthologs
-  species_ensembl <- useMart(host = ENSEMBL_URL, 
+  species_ensembl <- useMart(host = ensembl_url, 
                            biomart = "ENSEMBL_MART_ENSEMBL", 
                            dataset = str_c(species_str, "_gene_ensembl"))
   
   # Get species transcription start sites
-  species_tss_df <- as.tibble(getBM(attributes=c(
+  species_gene_df <- as.tibble(getBM(attributes=c(
     'ensembl_gene_id', 'external_gene_name', 'chromosome_name', 'strand',
-    'transcription_start_site', 'transcript_start', 'transcript_end'), 
+    'start_position', 'end_position'), 
     mart = species_ensembl)
-  ) %>% 
-  # Filter out duplicated entries (take only TSS from largest transcript)
-  mutate(transcript_length = transcript_end - transcript_start) %>% 
-  arrange(ensembl_gene_id, desc(transcript_length)) %>% 
-  distinct(ensembl_gene_id, .keep_all = TRUE)
+  )
 
   # Generate GRanges
-  speciesTssGR <- GRanges(seqnames = species_tss_df$chromosome_name,
-                        strand = ifelse(species_tss_df$strand == 1, "+", "-"),
-                        ranges = IRanges(start = species_tss_df$transcription_start_site,
-                                         width = 1),
-                        geneID = species_tss_df$ensembl_gene_id,
-                        gene_name = species_tss_df$external_gene_name
+  speciesGeneGR <- GRanges(seqnames = species_gene_df$chromosome_name,
+                        strand = ifelse(species_gene_df$strand == 1, "+", "-"),
+                        ranges = IRanges(start = species_gene_df$start_position,
+                                         end = species_gene_df$end_position),
+                        geneID = species_gene_df$ensembl_gene_id,
+                        gene_name = species_gene_df$external_gene_name
   )
   
-  return(speciesTssGR)
+  return(speciesGeneGR)
 }
+
+
 
 #' get one-to-one orthologs to all human genes from target species via ensembl
 get_orthologs <- function(species_str, mart){
@@ -133,6 +131,7 @@ get_orthologs <- function(species_str, mart){
   
   names(orthologsDF) <- names(orthologsDF) %>% 
     str_replace(species_str, "species")
+  
   # filter all human genes to have an "one2one" ortholog in mouse
   orthologs <- as.tibble(orthologsDF) %>% 
     filter(
@@ -145,19 +144,19 @@ get_orthologs <- function(species_str, mart){
 }
 
 #' get all adjacent ranges  
-getAdjacentPairs <- function(tssGR){
+getAdjacentPairs <- function(geneGR){
   
   # get the next tss for each gene along the chromsome
   # using the precede() function from GenomicRanges package
-  nextGene = precede(tssGR, ignore.strand = TRUE)
+  nextGene = precede(geneGR, ignore.strand = TRUE)
   
-  firstGR <- tssGR[!is.na(nextGene)]
-  nextGR <- tssGR[nextGene[!is.na(nextGene)]]
+  firstGR <- geneGR[!is.na(nextGene)]
+  nextGR <- geneGR[nextGene[!is.na(nextGene)]]
   
   gP = tibble(
     g1 = firstGR$geneID, 
     g2 = nextGR$geneID,
-    dist = abs(start(firstGR) - start(nextGR)),
+    dist = start(nextGR) - end(firstGR),
     strand = case_when(
       as.logical(strand(firstGR) == strand(nextGR)) ~ "same",
       as.logical(strand(firstGR) == "+" & strand(nextGR) == "-") ~ "convergent",
@@ -171,7 +170,7 @@ getAdjacentPairs <- function(tssGR){
 #' For all human adjacent genes get orthologs in target speceis and whether they
 #' are syntenic.
 #' 
-get_syntenic_pairs <- function(species_str, assembly_str, tssGR, 
+get_syntenic_pairs <- function(species_str, assembly_str, geneGR, 
                                ensembl_url = "aug2017.archive.ensembl.org",
                                size_thresholds = c(10000, 100000, 1000000)) {
   
@@ -179,11 +178,11 @@ get_syntenic_pairs <- function(species_str, assembly_str, tssGR,
                          biomart = "ENSEMBL_MART_ENSEMBL", 
                          dataset = "hsapiens_gene_ensembl")
   
-  speciesTssGR <- get_species_tssGR(species_str, ensembl_url)
+  speciesGeneGR <- get_species_geneGR(species_str, ensembl_url)
   orthologs <- get_orthologs(species_str, mart)
   
-  human_ortholog_GR <- tssGR[tssGR$geneID %in% orthologs$ensembl_gene_id]
-  species_ortholog_GR <- speciesTssGR[speciesTssGR$geneID %in% orthologs$species_homolog_ensembl_gene]
+  human_ortholog_GR <- geneGR[geneGR$geneID %in% orthologs$ensembl_gene_id]
+  species_ortholog_GR <- speciesGeneGR[speciesGeneGR$geneID %in% orthologs$species_homolog_ensembl_gene]
   
   human_adjacent <- getAdjacentPairs(human_ortholog_GR)
   species_adjacent <- getAdjacentPairs(species_ortholog_GR)
@@ -193,9 +192,9 @@ get_syntenic_pairs <- function(species_str, assembly_str, tssGR,
     species_adjacent,
     rename(species_adjacent, g1 = g2, g2 = g1)
   ) %>% 
-  rename(dist_species = dist, 
+    rename(dist_species = dist, 
          strand_species = strand) %>% 
-  mutate(adjacent_species = TRUE)
+    mutate(adjacent_species = TRUE)
   
   df <- human_adjacent %>% 
     # add ortholog to first gene
@@ -213,12 +212,13 @@ get_syntenic_pairs <- function(species_str, assembly_str, tssGR,
     )
   
   # build GRanges for span of adjacent paris
-  gr1 = tssGR[match(df$g1, tssGR$geneID)]
-  gr2 = tssGR[match(df$g2, tssGR$geneID)]
+  gr1 = geneGR[match(df$g1, geneGR$geneID)]
+  gr2 = geneGR[match(df$g2, geneGR$geneID)]
   
   adjacentGR <- GRanges(
     seqnames = seqnames(gr1),
-    IRanges(start(gr1), start(gr2)),
+    IRanges(start = pmin(end(gr1), end(gr2)),
+            width = df$dist),
     seqinfo = seqinfo(gr1)
   )
   

@@ -8,7 +8,7 @@
 #' 
 #' Plan:
 #' - get list of all human adjacent genes and annotate with the follwoing
-#'   - TSS distance
+#'   - Intergenic distance
 #'   - adjacent in mouse?
 #'      - same chrom
 #'      - same strand combination
@@ -48,35 +48,31 @@ ensembl <- useMart(host = ENSEMBL_URL,
                    dataset = "hsapiens_gene_ensembl")
 
 # Get human transcription start sites
-hum_tss_df <- as.tibble(getBM(attributes = c(
+hum_gene_df <- as.tibble(getBM(attributes = c(
   'ensembl_gene_id', 'external_gene_name', 'chromosome_name', 'strand',
-  'transcription_start_site', 'transcript_start', 'transcript_end'), 
+  'start_position', 'end_position'), 
   mart = ensembl)
   ) 
 
-tssDF <- hum_tss_df %>% 
-  # Filter out duplicated entries (take only TSS from largest transcript)
-  mutate(transcript_length = transcript_end - transcript_start) %>% 
-  arrange(ensembl_gene_id, desc(transcript_length)) %>% 
-  distinct(ensembl_gene_id, .keep_all = TRUE) %>% 
+geneDF <- hum_gene_df %>% 
   # Adapt UCSC name style
   mutate(chr = str_c("chr", chromosome_name)) %>%
   # Filter for valid names
   filter(chr %in% seqnames(hum_seqinfo))
 
 # Generate GRanges
-tssGR <- GRanges(seqnames = tssDF$chr,
-                      strand = ifelse(tssDF$strand == 1, "+", "-"),
-                      ranges = IRanges(start = tssDF$transcription_start_site,
-                                       width = 1),
-                      geneID = tssDF$ensembl_gene_id,
-                      gene_name = tssDF$external_gene_name,
+geneGR <- GRanges(seqnames = geneDF$chr,
+                      strand = ifelse(geneDF$strand == 1, "+", "-"),
+                      ranges = IRanges(start = geneDF$start_position,
+                                       end = geneDF$end_position),
+                      geneID = geneDF$ensembl_gene_id,
+                      gene_name = geneDF$external_gene_name,
                       seqinfo = hum_seqinfo
 )
 
 # Load data of other species --------------------------------------------------#
 
-# Load gene ensembl mouse gene ids and orthologs
+# Load gene ensembl species gene ids and orthologs
 mart <- useMart(host = ENSEMBL_URL, biomart = "ENSEMBL_MART_ENSEMBL")
 
 martData <- listDatasets(mart) %>% as_tibble() %>% 
@@ -89,7 +85,8 @@ speciesDF <- SPECIES %>%
                          str_split_fixed(species_name, " ", n = 3)[,2]),
     dataset = str_c(ensembl_name, "_gene_ensembl")
   ) %>% 
-  left_join(martData, by = "dataset")
+  left_join(martData, by = "dataset") %>% 
+  write_tsv("results/species_ensemble_datasets.tsv")
 
 # compute syntey and rearranged pairs -----------------------------------------#
 
@@ -97,14 +94,13 @@ speciesDF <- speciesDF %>%
   filter(!is.na(description)) %>% 
   mutate(
     df = map2(ensembl_name, genome_assembly, get_syntenic_pairs, 
-              tssGR = tssGR, 
-              ensembl_url = "aug2017.archive.ensembl.org",
+              geneGR = geneGR, 
+              ensembl_url = ENSEMBL_URL,
               size_thresholds = THRESHOLDS)
   )
 
 write_rds(speciesDF, "results/speciesDF.rds")
 #speciesDF <- read_rds("results/speciesDF.rds")
-#speciesDF <- read_rds("results/speciesDF_SAVE_2018-05-27.rds")
 
 syntenicDF <- speciesDF %>% 
   select(genome_assembly, trivial_name, df) %>% 
@@ -115,6 +111,41 @@ syntenicDF <- speciesDF %>%
   select(-bp)
 
 write_rds(syntenicDF, "results/syntenicDF.rds")
+
+gene_pair_stats <- syntenicDF %>% 
+  filter(
+    # filter out gene pairs with larger distance than size threshold
+    dist <= size_threshold, 
+    # if syntenic filter also for species distance smaller than threshold
+    !syntenic | dist_species <= size_threshold
+  ) %>% 
+  group_by(genome_assembly, size_threshold, syntenic, breakpoint) %>% 
+  summarize(n = n()) %>% 
+  mutate(percent = n / sum(n) * 100) %>% 
+  ungroup() %>% 
+  mutate(
+    syntenic = ifelse(syntenic, "syntenic", "non-syntenic"),
+    rearranged = ifelse(breakpoint, "rearranged", "non-rearranged")
+    ) %>% 
+  right_join(SPECIES, by = "genome_assembly") %>% 
+  filter(!is.na(size_threshold)) %>% 
+  write_tsv("results/syntenic_genes.gene_pair_stats.tsv")
+
+
+# Get statistics about species, gene pairs. 
+# We need: (for species and threshold)
+# - adjacent_genes_with_orthologs
+# - with_breakpoint
+# - 
+gene_pair_counts <- syntenicDF  %>% 
+  group_by(genome_assembly, size_threshold) %>% 
+  summarize(adjacent_genes_with_orthologs = n()) %>% 
+  select(-size_threshold) %>% 
+  distinct() 
+
+gene_pair_counts_out <- SPECIES %>% 
+  left_join(gene_pair_counts, by = "genome_assembly") %>% 
+  write_tsv("results/gene_pair_counts.tsv")
 
 
 syntenic_performance_DF <- syntenicDF %>% 
@@ -141,127 +172,14 @@ syntenic_performance_DF <- syntenicDF %>%
   ) %>% 
   mutate(
     FDR = FP / (FP + TP),
+    FPR = (FP / (FP + TN)),
     PPV = TP / (TP + FP),
     sensitivity = TP / (TP + FN),
     specificity = TN / (TN + FP)
   )
 
+syntenic_performance_DF <- SPECIES %>% 
+  left_join(syntenic_performance_DF, by = "trivial_name")
+
 write_rds(syntenic_performance_DF, "results/syntenic_performance_DF.rds")
 write_tsv(syntenic_performance_DF, "results/syntenic_performance_DF.tsv")
-
-
-# plot FDR ---------------------------------------------------------------------
-
-p <- ggplot(syntenic_performance_DF, aes(x = trivial_name, y = FDR, fill = as.factor(size_threshold))) + 
-  geom_bar(stat = "identity", position = position_dodge(1)) +
-  geom_text(aes(label = round(FDR, 2)), position = position_dodge(1), hjust = "inward") +
-  coord_flip() +
-  theme_bw() +
-  theme(legend.position = "bottom")
-ggsave("results/syntenic_genes.performance.FDR_by_species.pdf", w = 6, h = 6)
-
-# plot ROC curve ---------------------------------------------------------------
-
-p <- ggplot(syntenic_performance_DF, aes(x = 1- specificity, y = sensitivity, color = trivial_name)) + 
-  geom_line() + 
-  theme_bw() + 
-  lims(x = c(0, 1), y = c(0, 1))
-p
-# plot PRC curve ---------------------------------------------------------------
-
-p <- ggplot(syntenic_performance_DF, aes(x = sensitivity, y = PPV, color = trivial_name)) + 
-  geom_line() + 
-  theme_bw() + 
-  lims(x = c(0, 1), y = c(0, 1))
-p
-
-# example testing -------------------------------------------------------------#
-
-# false positiv breakpoints:
-false_positives <- syntenicDF %>% 
-  filter(
-    trivial_name == "chimpanzee", 
-    size_threshold == 100000, 
-    dist <= size_threshold, 
-    syntenic, 
-    breakpoint
-    ) %>% 
-  mutate(
-    gene_name_1 = tssGR$gene_name[match(g1, tssGR$geneID)],
-    gene_name_2 = tssGR$gene_name[match(g2, tssGR$geneID)]
-  ) %>%
-  select(gene_name_1, gene_name_2, everything()) %>% 
-  write_tsv("results/syntenic_gene_pairs.hg38_chimpanzee.false_positive_pairs_100000.tsv")
-
-
-# Get syntenic regions for each species and thresholdg ------------------------#
-
-# get for each species and threshold a GRanges with syntenic regions
-get_pair_range <- function(df, tssGR){
-  
-  gr1 = tssGR[match(df$g1, tssGR$geneID)]
-  gr2 = tssGR[match(df$g2, tssGR$geneID)]
-  
-  # build GRanges for span of adjacent paris
-  pairGR <- GRanges(
-    seqnames = seqnames(gr1),
-    IRanges(start(gr1), start(gr2)),
-    seqinfo = seqinfo(gr1)
-  )
-  return(pairGR)
-}
-
-
-syntenic_ranges_DF <- crossing(
-    genome_assembly = SPECIES$genome_assembly,
-    size_threshold = THRESHOLDS
-    ) %>% 
-  mutate(
-    filtered_df = map2(genome_assembly, size_threshold, 
-                         ~filter(syntenicDF,
-                             genome_assembly == .x, 
-                             size_threshold == .y,
-                             syntenic,
-                             dist <= size_threshold,
-                             !syntenic | dist_species <= size_threshold)
-                    ),
-    syntenic_range = map(filtered_df, get_pair_range, tssGR),
-    n_ranges = map_int(syntenic_range, length) 
-  )
-
-write_rds(syntenic_ranges_DF, "results/syntenic_genes.syntenic_ranges_DF.rds")
-
-
-# Read all breakpoint files and filter for syntenic regions
-
-write_bed_wrapper <- function(gr, out_file, ...){
-  if(length(gr) > 0){
-    export.bed(gr, out_file, ...)
-  }else{
-    write("", out_file)
-  }
-}
-
-
-nonsyn_flt_df <- syntenic_ranges_DF %>% 
-  mutate(
-    bp_file = str_c("data/breakpoints/hg38.", genome_assembly, ".",
-                           size_threshold,  ".bp.flt.bed"),
-    bp = map(bp_file, import.bed),
-    nonsyn_bp = map2(bp, syntenic_range, ~ .x[countOverlaps(.x, .y) == 0]),
-    out_file = str_replace(bp_file, ".bed$", ".nonsyn_flt.bed"),
-    n_bp = map_int(bp, length),
-    n_nonsyn_bp = map_int(nonsyn_bp, length),
-    rate_nonsyn = n_nonsyn_bp / n_bp,
-    out = map2(nonsyn_bp, out_file, write_bed_wrapper)
-  )
-
-write_rds(nonsyn_flt_df, "results/syntenic_gene_pairs.nonsyn_flt_df.rds")
-
-
-p <- ggplot(nonsyn_flt_df, aes(x = genome_assembly, y = rate_nonsyn, fill = factor(size_threshold))) +
-  geom_bar(stat = "identity", position = "dodge") +
-  geom_text(aes(label = round(rate_nonsyn, 2)), position = position_dodge(.9), hjust = "right") +
-  coord_flip() +
-  theme_bw()
-p
